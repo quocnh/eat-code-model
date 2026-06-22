@@ -1,0 +1,2 @@
+/Users/marknguyenh/Documents/Freelancer/Leetcode_Flashcard/android/app/.cxx/Debug/72261755/x86/CMakeFiles/edit_cache.dir
+/Users/marknguyenh/Documents/Freelancer/Leetcode_Flashcard/android/app/.cxx/Debug/72261755/x86/CMakeFiles/rebuild_cache.dir
