@@ -2,16 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import '../database/database_helper.dart';
 import '../models/flashcard.dart';
-import '../models/progress.dart';
-import '../services/problem_generator.dart';
-import '../services/llm_service.dart';
 import '../styles/colors.dart';
 import '../styles/text_styles.dart';
+import '../widgets/company_logo.dart';
 import '../widgets/markdown_syntax_highlighter.dart';
 
-/// Shows all AI-generated flashcards for a single company.
-/// Users can flip between question and solution, bookmark cards,
-/// and generate more problems on demand.
+/// Shows all AI-generated flashcards for a single company as a clean,
+/// title-only list. Tapping a row opens a detail sheet with the full
+/// question, solution and bookmark controls.
 class CompanyProblemScreen extends StatefulWidget {
   final String company;
 
@@ -26,7 +24,6 @@ class _CompanyProblemScreenState extends State<CompanyProblemScreen> {
 
   List<Flashcard> _cards = [];
   bool _isLoading = true;
-  bool _isGenerating = false;
 
   @override
   void initState() {
@@ -47,67 +44,44 @@ class _CompanyProblemScreenState extends State<CompanyProblemScreen> {
     }
   }
 
-  Future<void> _generateMore() async {
-    setState(() => _isGenerating = true);
-
-    try {
-      final service = TemplateLlmService();
-      await service.initialize();
-      final generator = ProblemGenerator(service);
-
-      for (final difficulty in ['Easy', 'Medium', 'Hard']) {
-        final problem = await generator.generateCompanyProblem(
-          company: widget.company,
-          difficulty: difficulty,
-        );
-
-        final flashcard = Flashcard(
-          title: problem.title,
-          content: problem.toMarkdownContent(),
-          difficulty: problem.difficulty,
-          category: problem.category,
-          company: widget.company,
-          isPremium: false,
-          createdAt: DateTime.now(),
-        );
-
-        final id = await _dbHelper.insertFlashcard(flashcard);
-        await _dbHelper.updateProgress(Progress(
-          flashcardId: id,
-          isCompleted: false,
-          confidenceLevel: 0,
-          timesReviewed: 0,
-        ));
-      }
-
-      await _loadCards();
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('3 new problems generated!'),
-            backgroundColor: AppColors.success,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Generation failed: $e'),
-            backgroundColor: AppColors.error,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isGenerating = false);
-    }
-  }
-
   Future<void> _toggleBookmark(Flashcard card) async {
     if (card.id == null) return;
     await _dbHelper.toggleBookmark(card.id!);
     await _loadCards();
+  }
+
+  Color _diffColor(String d) {
+    switch (d.toLowerCase()) {
+      case 'easy':
+        return AppColors.easy;
+      case 'hard':
+        return AppColors.hard;
+      default:
+        return AppColors.medium;
+    }
+  }
+
+  void _openProblemDetail(Flashcard card) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _ProblemDetailSheet(
+        card: card,
+        onBookmarkToggled: () async {
+          await _toggleBookmark(card);
+          // Pop and reopen with the refreshed card so the icon updates.
+          if (mounted) {
+            Navigator.of(context).pop();
+            final updated = _cards.firstWhere(
+              (c) => c.id == card.id,
+              orElse: () => card,
+            );
+            _openProblemDetail(updated);
+          }
+        },
+      ),
+    );
   }
 
   Widget _buildEmptyState() {
@@ -123,23 +97,92 @@ class _CompanyProblemScreenState extends State<CompanyProblemScreen> {
             Text('No problems yet', style: AppTextStyles.heading2),
             const SizedBox(height: 8),
             Text(
-              'Generate your first set of ${widget.company} problems',
+              'Problems for ${widget.company} will appear here once generated.',
               style: AppTextStyles.body2,
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: _isGenerating ? null : _generateMore,
-              icon: const Icon(Icons.add),
-              label: const Text('Generate Problems'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProblemRow(Flashcard card, int index) {
+    return InkWell(
+      onTap: () => _openProblemDetail(card),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            // Numeric index badge
+            Container(
+              width: 30,
+              height: 30,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withOpacity(0.08),
+                shape: BoxShape.circle,
               ),
+              child: Text(
+                '${index + 1}',
+                style: const TextStyle(
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            // Title only
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    card.title,
+                    style: AppTextStyles.body1
+                        .copyWith(fontWeight: FontWeight.w600),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: _diffColor(card.difficulty).withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          card.difficulty,
+                          style: TextStyle(
+                            color: _diffColor(card.difficulty),
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          card.category,
+                          style: AppTextStyles.body2.copyWith(fontSize: 11),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            if (card.isBookmarked)
+              Icon(Icons.bookmark, size: 18, color: AppColors.warning),
+            Icon(
+              Icons.chevron_right,
+              color: AppColors.textSecondary.withOpacity(0.5),
             ),
           ],
         ),
@@ -149,14 +192,11 @@ class _CompanyProblemScreenState extends State<CompanyProblemScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final profile = companyProfiles[widget.company];
-    final emoji = profile?['emoji'] as String? ?? '🏢';
-
     return Scaffold(
       appBar: AppBar(
         title: Row(children: [
-          Text(emoji, style: const TextStyle(fontSize: 22)),
-          const SizedBox(width: 8),
+          CompanyLogo(company: widget.company, size: 28),
+          const SizedBox(width: 10),
           Text('${widget.company} Problems'),
         ]),
       ),
@@ -164,74 +204,62 @@ class _CompanyProblemScreenState extends State<CompanyProblemScreen> {
           ? const Center(child: CircularProgressIndicator())
           : _cards.isEmpty
               ? _buildEmptyState()
-              : Column(
-                  children: [
-                    // Summary row
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
-                      child: Row(
-                        children: [
-                          Text('${_cards.length} problems',
-                              style: AppTextStyles.body2),
-                          const Spacer(),
-                          TextButton.icon(
-                            onPressed: _isGenerating ? null : _generateMore,
-                            icon: _isGenerating
-                                ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 2),
-                                  )
-                                : const Icon(Icons.add_circle_outline,
-                                    size: 18),
-                            label:
-                                Text(_isGenerating ? 'Loading…' : 'Get More'),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Divider(height: 1),
-                    // Scrollable problem list
-                    Expanded(
-                      child: ListView.builder(
-                        padding: const EdgeInsets.only(bottom: 24),
-                        itemCount: _cards.length,
-                        itemBuilder: (_, i) => _ProblemCardItem(
-                          key: ValueKey(_cards[i].id),
-                          card: _cards[i],
-                          company: widget.company,
-                          onBookmarkToggled: () => _toggleBookmark(_cards[i]),
+              : RefreshIndicator(
+                  onRefresh: _loadCards,
+                  child: Column(
+                    children: [
+                      // Summary row
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+                        child: Row(
+                          children: [
+                            Text('${_cards.length} problems',
+                                style: AppTextStyles.body2),
+                            const Spacer(),
+                            Text('Tap to view',
+                                style: AppTextStyles.body2.copyWith(
+                                  fontSize: 12,
+                                  fontStyle: FontStyle.italic,
+                                )),
+                          ],
                         ),
                       ),
-                    ),
-                  ],
+                      const Divider(height: 1),
+                      Expanded(
+                        child: ListView.separated(
+                          padding: const EdgeInsets.only(bottom: 24),
+                          itemCount: _cards.length,
+                          separatorBuilder: (_, __) => Divider(
+                              height: 1, color: Colors.grey.shade100),
+                          itemBuilder: (_, i) =>
+                              _buildProblemRow(_cards[i], i),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
     );
   }
 }
 
 // ---------------------------------------------------------------------------
-// Self-managing problem card for the list view
+// Problem detail bottom sheet — shows full question/solution with toggle
 // ---------------------------------------------------------------------------
 
-class _ProblemCardItem extends StatefulWidget {
+class _ProblemDetailSheet extends StatefulWidget {
   final Flashcard card;
-  final String company;
   final VoidCallback onBookmarkToggled;
 
-  const _ProblemCardItem({
-    super.key,
+  const _ProblemDetailSheet({
     required this.card,
-    required this.company,
     required this.onBookmarkToggled,
   });
 
   @override
-  State<_ProblemCardItem> createState() => _ProblemCardItemState();
+  State<_ProblemDetailSheet> createState() => _ProblemDetailSheetState();
 }
 
-class _ProblemCardItemState extends State<_ProblemCardItem> {
+class _ProblemDetailSheetState extends State<_ProblemDetailSheet> {
   bool _showSolution = false;
 
   Color _diffColor(String d) {
@@ -248,163 +276,126 @@ class _ProblemCardItemState extends State<_ProblemCardItem> {
   @override
   Widget build(BuildContext context) {
     final card = widget.card;
-    final content =
-        _showSolution ? card.getSolutionContent() : card.getQuestionContent();
 
-    return GestureDetector(
-      onTap: () => setState(() => _showSolution = !_showSolution),
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
+    return DraggableScrollableSheet(
+      initialChildSize: 0.85,
+      minChildSize: 0.5,
+      maxChildSize: 0.95,
+      expand: false,
+      builder: (_, scrollController) => Container(
+        decoration: const BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.08),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header
+            // Drag handle
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: const BoxDecoration(
-                color: Color(0xFFF8F9FA),
-                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              margin: const EdgeInsets.only(top: 12, bottom: 4),
+              width: 44,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
               ),
+            ),
+            // Header
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 12, 8),
               child: Row(
                 children: [
-                  // Difficulty
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                       color: _diffColor(card.difficulty).withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(6),
+                      borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
                       card.difficulty,
                       style: TextStyle(
                         color: _diffColor(card.difficulty),
                         fontSize: 11,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
                   const SizedBox(width: 6),
-                  // Category
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: Colors.blue.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(6),
+                      color: AppColors.primary.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
                       card.category,
                       style: const TextStyle(
                         color: AppColors.primary,
                         fontSize: 11,
-                        fontWeight: FontWeight.w500,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
                   const Spacer(),
-                  // Bookmark — absorbed so it doesn't trigger card flip
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () => widget.onBookmarkToggled(),
-                    child: Padding(
-                      padding: const EdgeInsets.all(4),
-                      child: Icon(
-                        card.isBookmarked
-                            ? Icons.bookmark
-                            : Icons.bookmark_border,
-                        color: card.isBookmarked
-                            ? AppColors.warning
-                            : AppColors.textSecondary,
-                        size: 20,
-                      ),
+                  IconButton(
+                    icon: Icon(
+                      card.isBookmarked
+                          ? Icons.bookmark
+                          : Icons.bookmark_border,
+                      color: card.isBookmarked
+                          ? AppColors.warning
+                          : AppColors.textSecondary,
                     ),
+                    onPressed: widget.onBookmarkToggled,
                   ),
-                  const SizedBox(width: 8),
-                  // Q / S pill
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: _showSolution
-                          ? AppColors.success.withOpacity(0.12)
-                          : AppColors.primary.withOpacity(0.10),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          _showSolution ? Icons.lightbulb : Icons.help_outline,
-                          size: 13,
-                          color: _showSolution
-                              ? AppColors.success
-                              : AppColors.primary,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          _showSolution ? 'Solution' : 'Question',
-                          style: TextStyle(
-                            color: _showSolution
-                                ? AppColors.success
-                                : AppColors.primary,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 20),
+                    onPressed: () => Navigator.pop(context),
                   ),
                 ],
               ),
             ),
             // Title
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-              child: Text(card.title, style: AppTextStyles.heading2),
-            ),
-            // Markdown content — MarkdownBody expands to natural height
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: MarkdownBody(
-                data: content.isNotEmpty
-                    ? content
-                    : '_Tap to reveal ${_showSolution ? "question" : "solution"}_',
-                builders: {'code': SyntaxHighlightMarkdownBuilder()},
-                styleSheet: MarkdownStyles.getStyleSheet(context),
-                shrinkWrap: true,
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(card.title, style: AppTextStyles.heading1),
               ),
             ),
-            // Tap hint
+            // Question/Solution toggle
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.touch_app,
-                      size: 12,
-                      color: AppColors.textSecondary.withOpacity(0.5)),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Tap to ${_showSolution ? "see question" : "reveal solution"}',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: AppColors.textSecondary.withOpacity(0.5),
+                  Expanded(
+                    child: _SegmentedToggle(
+                      selected: _showSolution,
+                      onChanged: (v) => setState(() => _showSolution = v),
                     ),
                   ),
                 ],
+              ),
+            ),
+            const Divider(height: 1),
+            // Markdown content (scrollable)
+            Expanded(
+              child: SingleChildScrollView(
+                controller: scrollController,
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+                child: MarkdownBody(
+                  data: _showSolution
+                      ? (card.getSolutionContent().isNotEmpty
+                          ? card.getSolutionContent()
+                          : card.solution)
+                      : (card.getQuestionContent().isNotEmpty
+                          ? card.getQuestionContent()
+                          : card.question),
+                  selectable: true,
+                  builders: {'code': SyntaxHighlightMarkdownBuilder()},
+                  styleSheet: MarkdownStyles.getStyleSheet(context),
+                ),
               ),
             ),
           ],
@@ -413,3 +404,76 @@ class _ProblemCardItemState extends State<_ProblemCardItem> {
     );
   }
 }
+
+class _SegmentedToggle extends StatelessWidget {
+  final bool selected; // false = question, true = solution
+  final ValueChanged<bool> onChanged;
+
+  const _SegmentedToggle({required this.selected, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          _buildSegment('Question', Icons.help_outline, !selected,
+              () => onChanged(false), AppColors.primary),
+          _buildSegment('Solution', Icons.lightbulb, selected,
+              () => onChanged(true), AppColors.success),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSegment(String label, IconData icon, bool active,
+      VoidCallback onTap, Color activeColor) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: active ? Colors.white : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: active
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.06),
+                      blurRadius: 4,
+                      offset: const Offset(0, 1),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 15,
+                color: active ? activeColor : AppColors.textSecondary,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: active ? activeColor : AppColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+

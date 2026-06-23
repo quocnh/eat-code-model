@@ -213,6 +213,10 @@ String _buildSmartAnswer(
 
 /// Floating draggable AI assistant button.
 /// Must be placed inside a Stack (use Positioned.fill as parent).
+///
+/// Conversation history is preserved across sheet open/close cycles by a
+/// process-wide singleton store. The button also pulses, glows and rotates
+/// its icon when idle so it stays visually alive on top of any screen.
 class AiChatButton extends StatefulWidget {
   final Flashcard? currentCard;
 
@@ -222,9 +226,84 @@ class AiChatButton extends StatefulWidget {
   State<AiChatButton> createState() => _AiChatButtonState();
 }
 
-class _AiChatButtonState extends State<AiChatButton> {
+/// In-memory chat history that survives modal close/reopen but resets when
+/// the app restarts. Keyed by the current flashcard id (null = global chat).
+class _ChatHistoryStore {
+  static final _ChatHistoryStore instance = _ChatHistoryStore._();
+  _ChatHistoryStore._();
+
+  final Map<String, List<_ChatMessage>> _byCard = {};
+
+  String _keyFor(Flashcard? card) =>
+      card?.id?.toString() ?? '__global__';
+
+  List<_ChatMessage> get(Flashcard? card) =>
+      _byCard[_keyFor(card)] ?? const [];
+
+  void set(Flashcard? card, List<_ChatMessage> messages) {
+    _byCard[_keyFor(card)] = List<_ChatMessage>.from(messages);
+  }
+
+  void clear(Flashcard? card) {
+    _byCard.remove(_keyFor(card));
+  }
+}
+
+class _AiChatButtonState extends State<AiChatButton>
+    with TickerProviderStateMixin {
   Offset? _pos;
   bool _isDragging = false;
+  bool _isPressed = false;
+
+  late final AnimationController _pulseController;
+  late final Animation<double> _pulseAnimation;
+  late final AnimationController _rotateController;
+  late final AnimationController _haloController;
+  late final Animation<double> _haloAnimation;
+
+  final _gemma = GemmaLlmService();
+
+  @override
+  void initState() {
+    super.initState();
+
+    // Slow breathing/pulse animation — scales the button gently when idle.
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1800),
+    )..repeat(reverse: true);
+    _pulseAnimation = Tween<double>(begin: 0.95, end: 1.08).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+
+    // Slow icon rotation — gives the AI brain a subtle "thinking" feel.
+    _rotateController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 8),
+    )..repeat();
+
+    // Halo / ripple ring that expands outward.
+    _haloController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2400),
+    )..repeat();
+    _haloAnimation = CurvedAnimation(
+      parent: _haloController,
+      curve: Curves.easeOut,
+    );
+
+    // Eagerly kick off the on-device LLM init so the chat can use the LLM
+    // the moment the user taps the button (vs. waiting until the sheet opens).
+    _gemma.initialize().catchError((_) {});
+  }
+
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    _rotateController.dispose();
+    _haloController.dispose();
+    super.dispose();
+  }
 
   void _openChat(BuildContext context) {
     showModalBottomSheet(
@@ -244,8 +323,8 @@ class _AiChatButtonState extends State<AiChatButton> {
           constraints.maxWidth - 72,
           constraints.maxHeight - 80,
         );
-        final dx = _pos!.dx.clamp(0.0, constraints.maxWidth - 56);
-        final dy = _pos!.dy.clamp(0.0, constraints.maxHeight - 56);
+        final dx = _pos!.dx.clamp(0.0, constraints.maxWidth - 72);
+        final dy = _pos!.dy.clamp(0.0, constraints.maxHeight - 72);
 
         return Stack(
           clipBehavior: Clip.none,
@@ -255,43 +334,148 @@ class _AiChatButtonState extends State<AiChatButton> {
               top: dy,
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
+                onPanStart: (_) => setState(() => _isDragging = true),
                 onPanUpdate: (d) {
                   setState(() {
-                    _isDragging = true;
                     _pos = Offset(
                       (_pos!.dx + d.delta.dx)
-                          .clamp(0, constraints.maxWidth - 56),
+                          .clamp(0, constraints.maxWidth - 72),
                       (_pos!.dy + d.delta.dy)
-                          .clamp(0, constraints.maxHeight - 56),
+                          .clamp(0, constraints.maxHeight - 72),
                     );
                   });
                 },
-                onPanEnd: (_) => setState(() => _isDragging = false),
+                onPanEnd: (_) {
+                  // Snap to nearest horizontal edge for a polished feel.
+                  setState(() {
+                    _isDragging = false;
+                    final snappedX =
+                        _pos!.dx + 36 < constraints.maxWidth / 2
+                            ? 12.0
+                            : constraints.maxWidth - 72 - 12;
+                    _pos = Offset(snappedX, _pos!.dy);
+                  });
+                },
+                onTapDown: (_) => setState(() => _isPressed = true),
+                onTapCancel: () => setState(() => _isPressed = false),
+                onTapUp: (_) => setState(() => _isPressed = false),
                 onTap: () {
                   if (!_isDragging) _openChat(context);
                 },
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  width: 52,
-                  height: 52,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF1565C0), Color(0xFF42A5F5)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.primary
-                            .withOpacity(_isDragging ? 0.5 : 0.3),
-                        blurRadius: _isDragging ? 16 : 8,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
+                child: SizedBox(
+                  width: 72,
+                  height: 72,
+                  child: AnimatedBuilder(
+                    animation: Listenable.merge([
+                      _pulseController,
+                      _rotateController,
+                      _haloController,
+                    ]),
+                    builder: (context, _) {
+                      final scale = _isPressed
+                          ? 0.9
+                          : (_isDragging ? 1.12 : _pulseAnimation.value);
+                      return Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          // Expanding halo ring — fades as it grows.
+                          if (!_isDragging)
+                            Opacity(
+                              opacity:
+                                  (1.0 - _haloAnimation.value).clamp(0.0, 0.55),
+                              child: Container(
+                                width: 40 + 36 * _haloAnimation.value,
+                                height: 40 + 36 * _haloAnimation.value,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: const Color(0xFF42A5F5),
+                                    width: 2,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          // Main pulsing button
+                          Transform.scale(
+                            scale: scale,
+                            child: Container(
+                              width: 56,
+                              height: 56,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: const SweepGradient(
+                                  colors: [
+                                    Color(0xFF1565C0),
+                                    Color(0xFF42A5F5),
+                                    Color(0xFF7E57C2),
+                                    Color(0xFF1565C0),
+                                  ],
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: AppColors.primary.withOpacity(
+                                      _isDragging ? 0.55 : 0.35,
+                                    ),
+                                    blurRadius: _isDragging ? 18 : 12,
+                                    spreadRadius: _isDragging ? 2 : 0,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                  BoxShadow(
+                                    color: const Color(0xFF7E57C2)
+                                        .withOpacity(0.25),
+                                    blurRadius: 20,
+                                    spreadRadius: -2,
+                                    offset: const Offset(0, 0),
+                                  ),
+                                ],
+                              ),
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  // Slowly rotating sparkle ring
+                                  Transform.rotate(
+                                    angle:
+                                        _rotateController.value * 2 * 3.14159,
+                                    child: Opacity(
+                                      opacity: 0.7,
+                                      child: Icon(
+                                        Icons.auto_awesome,
+                                        color: Colors.white.withOpacity(0.85),
+                                        size: 18,
+                                      ),
+                                    ),
+                                  ),
+                                  // Central AI icon
+                                  const Icon(
+                                    Icons.psychology,
+                                    color: Colors.white,
+                                    size: 26,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          // Tiny status dot — green when the LLM is loaded
+                          Positioned(
+                            top: 8,
+                            right: 8,
+                            child: Container(
+                              width: 10,
+                              height: 10,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: _gemma.isModelLoaded
+                                    ? const Color(0xFF4CAF50)
+                                    : Colors.orange,
+                                border:
+                                    Border.all(color: Colors.white, width: 1.5),
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
                   ),
-                  child: const Icon(Icons.psychology,
-                      color: Colors.white, size: 26),
                 ),
               ),
             ),
@@ -317,30 +501,43 @@ class _AiChatSheet extends StatefulWidget {
 class _AiChatSheetState extends State<_AiChatSheet> {
   final _controller = TextEditingController();
   final _scrollController = ScrollController();
-  final List<_ChatMessage> _messages = [];
+  late List<_ChatMessage> _messages;
   bool _isGenerating = false;
   final _gemma = GemmaLlmService();
 
   @override
   void initState() {
     super.initState();
+
+    // Restore prior conversation for this card (if any) so the assistant
+    // remembers what was said in earlier sessions of the same flashcard.
+    final saved = _ChatHistoryStore.instance.get(widget.card);
+    _messages = List<_ChatMessage>.from(saved);
+
     // Refresh the badge once init completes (loaded or failed).
     _gemma.initialize().then((_) {
       if (mounted) setState(() {});
     }).catchError((_) {
       if (mounted) setState(() {});
     });
-    if (widget.card != null) {
-      _messages.add(_ChatMessage(
-        role: 'assistant',
-        text:
-            'I can help you with **${widget.card!.title}**. Ask me anything — hints, time complexity, code walkthrough, etc.',
-      ));
+
+    if (_messages.isEmpty) {
+      if (widget.card != null) {
+        _messages.add(_ChatMessage(
+          role: 'assistant',
+          text:
+              'I can help you with **${widget.card!.title}**. Ask me anything — hints, time complexity, code walkthrough, etc.',
+        ));
+      } else {
+        _messages.add(const _ChatMessage(
+          role: 'assistant',
+          text: 'Ask me any coding question and I\'ll help!',
+        ));
+      }
+      _persistHistory();
     } else {
-      _messages.add(const _ChatMessage(
-        role: 'assistant',
-        text: 'Ask me any coding question and I\'ll help!',
-      ));
+      // Auto-scroll to the bottom of the restored conversation.
+      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
     }
   }
 
@@ -351,16 +548,40 @@ class _AiChatSheetState extends State<_AiChatSheet> {
     super.dispose();
   }
 
+  void _persistHistory() {
+    _ChatHistoryStore.instance.set(widget.card, _messages);
+  }
+
+  void _clearHistory() {
+    setState(() {
+      _messages.clear();
+      if (widget.card != null) {
+        _messages.add(_ChatMessage(
+          role: 'assistant',
+          text:
+              'Cleared. Ask me anything about **${widget.card!.title}**.',
+        ));
+      } else {
+        _messages.add(const _ChatMessage(
+          role: 'assistant',
+          text: 'Cleared. Ask me a new question!',
+        ));
+      }
+    });
+    _persistHistory();
+  }
+
   String _buildGemmaPrompt(String userQuestion) {
     final card = widget.card;
 
-    // Build a conversation transcript from the last ~6 turns (exclude the
-    // current empty assistant placeholder at the end of _messages).
+    // Build a conversation transcript using the WHOLE persisted history
+    // (last 12 turns to keep the prompt bounded) so the assistant remembers
+    // earlier sessions, not just messages from the current open of the sheet.
     final prior = _messages
         .take(_messages.length - 1)
         .where((m) => m.text.isNotEmpty)
         .toList();
-    final start = (prior.length - 6).clamp(0, prior.length);
+    final start = (prior.length - 12).clamp(0, prior.length);
     final histText = prior
         .sublist(start)
         .map((m) => '${m.role == 'user' ? 'User' : 'Assistant'}: ${m.text}')
@@ -369,10 +590,10 @@ class _AiChatSheetState extends State<_AiChatSheet> {
         histText.isNotEmpty ? 'Conversation so far:\n$histText\n\n' : '';
 
     if (card == null) {
-      return 'You are a concise coding tutor.\n\n'
+      return 'You are a concise coding tutor. Remember the conversation context.\n\n'
           '${histBlock}User: $userQuestion\n\nAnswer concisely in 2-4 sentences.';
     }
-    return 'You are a concise coding tutor. '
+    return 'You are a concise coding tutor. Remember and build on the conversation context. '
         'The user is studying "${card.title}" (${card.difficulty} ${card.category}).\n\n'
         'Problem:\n${card.question}\n\nSolution:\n${card.solution}\n\n'
         '${histBlock}User: $userQuestion\n\n'
@@ -389,7 +610,14 @@ class _AiChatSheetState extends State<_AiChatSheet> {
       _messages.add(const _ChatMessage(role: 'assistant', text: ''));
       _isGenerating = true;
     });
+    _persistHistory();
     _scrollToBottom();
+
+    // Ensure the model has had a chance to load before we decide which path
+    // to take. If init was already attempted this is essentially a no-op.
+    try {
+      await _gemma.initialize();
+    } catch (_) {}
 
     // Use Gemma streaming if model is loaded, else smart card-based fallback
     if (_gemma.isModelLoaded) {
@@ -433,7 +661,10 @@ class _AiChatSheetState extends State<_AiChatSheet> {
       }
     }
 
-    if (mounted) setState(() => _isGenerating = false);
+    if (mounted) {
+      setState(() => _isGenerating = false);
+      _persistHistory();
+    }
   }
 
   void _scrollToBottom() {
@@ -490,26 +721,58 @@ class _AiChatSheetState extends State<_AiChatSheet> {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    if (!_gemma.isModelLoaded)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: Colors.orange.withOpacity(0.12),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          'Template mode',
-                          style: TextStyle(
-                              fontSize: 11, color: Colors.orange[700]),
-                        ),
+                    // Mode badge — green when LLM is loaded, orange otherwise.
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: _gemma.isModelLoaded
+                            ? AppColors.success.withOpacity(0.12)
+                            : Colors.orange.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                    const SizedBox(width: 8),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            _gemma.isModelLoaded
+                                ? Icons.memory
+                                : Icons.description_outlined,
+                            size: 12,
+                            color: _gemma.isModelLoaded
+                                ? AppColors.success
+                                : Colors.orange[700],
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            _gemma.isModelLoaded ? 'LLM' : 'Template',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: _gemma.isModelLoaded
+                                  ? AppColors.success
+                                  : Colors.orange[700],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    // Clear conversation
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, size: 20),
+                      tooltip: 'Clear conversation',
+                      onPressed: _isGenerating ? null : _clearHistory,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                          minWidth: 36, minHeight: 36),
+                    ),
                     IconButton(
                       icon: const Icon(Icons.close, size: 20),
                       onPressed: () => Navigator.pop(context),
                       padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
+                      constraints: const BoxConstraints(
+                          minWidth: 36, minHeight: 36),
                     ),
                   ],
                 ),

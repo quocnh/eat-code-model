@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import '../database/database_helper.dart';
-import '../models/flashcard.dart';
-import '../models/progress.dart';
 import '../services/problem_generator.dart';
-import '../services/llm_service.dart';
 import '../styles/colors.dart';
 import '../styles/text_styles.dart';
+import '../widgets/company_logo.dart';
 import 'company_problem_screen.dart';
 
 class CompanyCards extends StatefulWidget {
@@ -20,7 +18,6 @@ class _CompanyCardsState extends State<CompanyCards> {
   Map<String, Map<String, int>> _difficultyStats = {};
   Map<String, int> _totalCounts = {};
   bool _isLoading = true;
-  final Map<String, bool> _generating = {};
 
   // Ordered list matching companyProfiles
   static const _companies = [
@@ -62,66 +59,6 @@ class _CompanyCardsState extends State<CompanyCards> {
     }
   }
 
-  Future<void> _generateMore(String company) async {
-    setState(() => _generating[company] = true);
-
-    try {
-      final service = TemplateLlmService();
-      await service.initialize();
-      final generator = ProblemGenerator(service);
-
-      // Generate one problem per difficulty to keep it quick
-      for (final difficulty in ['Easy', 'Medium', 'Hard']) {
-        final problem = await generator.generateCompanyProblem(
-          company: company,
-          difficulty: difficulty,
-        );
-
-        final flashcard = Flashcard(
-          title: problem.title,
-          content: problem.toMarkdownContent(),
-          difficulty: problem.difficulty,
-          category: problem.category,
-          company: company,
-          isPremium: false,
-          createdAt: DateTime.now(),
-        );
-
-        final id = await _dbHelper.insertFlashcard(flashcard);
-        await _dbHelper.updateProgress(Progress(
-          flashcardId: id,
-          isCompleted: false,
-          confidenceLevel: 0,
-          timesReviewed: 0,
-        ));
-      }
-
-      await _loadStats();
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).clearSnackBars();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('3 new $company problems generated!'),
-            backgroundColor: AppColors.success,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).clearSnackBars();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to generate problems: $e'),
-            backgroundColor: AppColors.error,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _generating[company] = false);
-    }
-  }
-
   Color _getDifficultyColor(String difficulty) {
     switch (difficulty.toLowerCase()) {
       case 'easy':
@@ -154,12 +91,10 @@ class _CompanyCardsState extends State<CompanyCards> {
 
   Widget _buildCompanyCard(String company) {
     final profile = companyProfiles[company];
-    final emoji = profile?['emoji'] as String? ?? '🏢';
     final note = profile?['note'] as String? ?? '';
     final stats =
         _difficultyStats[company] ?? {'Easy': 0, 'Medium': 0, 'Hard': 0};
     final total = _totalCounts[company] ?? 0;
-    final isGenerating = _generating[company] ?? false;
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -168,26 +103,24 @@ class _CompanyCardsState extends State<CompanyCards> {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        onTap: isGenerating
-            ? null
-            : () async {
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => CompanyProblemScreen(company: company),
-                  ),
-                );
-                _loadStats();
-              },
+        onTap: () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => CompanyProblemScreen(company: company),
+            ),
+          );
+          _loadStats();
+        },
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header row
+              // Header row — real-style brand logo
               Row(
                 children: [
-                  Text(emoji, style: const TextStyle(fontSize: 28)),
+                  CompanyLogo(company: company, size: 44),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -201,6 +134,8 @@ class _CompanyCardsState extends State<CompanyCards> {
                       ],
                     ),
                   ),
+                  Icon(Icons.chevron_right,
+                      color: AppColors.textSecondary.withOpacity(0.6)),
                 ],
               ),
 
@@ -221,43 +156,13 @@ class _CompanyCardsState extends State<CompanyCards> {
               const SizedBox(height: 12),
 
               // Difficulty chips
-              Row(
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
                 children: [
                   _buildDifficultyChip('Easy', stats['Easy'] ?? 0),
-                  const SizedBox(width: 6),
                   _buildDifficultyChip('Medium', stats['Medium'] ?? 0),
-                  const SizedBox(width: 6),
                   _buildDifficultyChip('Hard', stats['Hard'] ?? 0),
-                ],
-              ),
-
-              const SizedBox(height: 14),
-
-              // Get More button — tap card body to practice
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  ElevatedButton.icon(
-                    onPressed:
-                        isGenerating ? null : () => _generateMore(company),
-                    icon: isGenerating
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Icon(Icons.add, size: 18),
-                    label: Text(isGenerating ? 'Loading…' : 'Get More'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10)),
-                    ),
-                  ),
                 ],
               ),
             ],

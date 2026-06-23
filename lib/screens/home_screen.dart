@@ -205,6 +205,176 @@ class HomeScreenState extends State<HomeScreen> {
     _navigateToCard(randomIndex);
   }
 
+  void _showAllProblems() {
+    if (_flashcards.isEmpty) return;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        minChildSize: 0.4,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (_, scrollController) => Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            children: [
+              // Drag handle
+              Container(
+                margin: const EdgeInsets.only(top: 12, bottom: 8),
+                width: 44,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              // Header
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 12, 8),
+                child: Row(
+                  children: [
+                    Icon(Icons.list_alt,
+                        color: AppColors.primary, size: 22),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'All problems (${_flashcards.length})',
+                        style: AppTextStyles.heading2,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, size: 20),
+                      onPressed: () => Navigator.pop(sheetContext),
+                    ),
+                  ],
+                ),
+              ),
+              if (_selectedCategoryIndex != 0)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        _categories[_selectedCategoryIndex],
+                        style: AppTextStyles.chipText.copyWith(
+                          color: AppColors.primary,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              const Divider(height: 1),
+              // Problem list
+              Expanded(
+                child: ListView.separated(
+                  controller: scrollController,
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  itemCount: _flashcards.length,
+                  separatorBuilder: (_, __) =>
+                      Divider(height: 1, color: Colors.grey.shade100),
+                  itemBuilder: (_, index) {
+                    final card = _flashcards[index];
+                    final isCurrent = index == _currentCardIndex;
+                    return ListTile(
+                      dense: true,
+                      onTap: () {
+                        Navigator.pop(sheetContext);
+                        _navigateToCard(index);
+                      },
+                      leading: Container(
+                        width: 32,
+                        height: 32,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: isCurrent
+                              ? AppColors.primary
+                              : AppColors.primary.withOpacity(0.08),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Text(
+                          '${index + 1}',
+                          style: TextStyle(
+                            color:
+                                isCurrent ? Colors.white : AppColors.primary,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                      title: Text(
+                        card.title,
+                        style: AppTextStyles.body1.copyWith(
+                          fontWeight:
+                              isCurrent ? FontWeight.w600 : FontWeight.w500,
+                          color: isCurrent
+                              ? AppColors.primary
+                              : AppColors.textPrimary,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: _getDifficultyColor(card.difficulty)
+                                    .withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                card.difficulty,
+                                style: TextStyle(
+                                  color: _getDifficultyColor(card.difficulty),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Flexible(
+                              child: Text(
+                                card.category,
+                                style: AppTextStyles.body2
+                                    .copyWith(fontSize: 11),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      trailing: card.isBookmarked
+                          ? Icon(Icons.bookmark,
+                              size: 18, color: AppColors.warning)
+                          : null,
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _refreshProgressScreen() async {
     // Pop back to the main navigation screen
     while (Navigator.of(context).canPop()) {
@@ -539,6 +709,15 @@ class HomeScreenState extends State<HomeScreen> {
                                       : _handleRandomCard,
                                   color: AppColors.primary,
                                   tooltip: 'Random Card',
+                                ),
+                                // List all problems
+                                IconButton(
+                                  icon: const Icon(Icons.list_alt, size: 22),
+                                  onPressed: _flashcards.isEmpty
+                                      ? null
+                                      : _showAllProblems,
+                                  color: AppColors.primary,
+                                  tooltip: 'List all problems',
                                 ),
                                 // Timer
                                 IconButton(
