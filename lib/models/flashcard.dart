@@ -33,10 +33,10 @@ class Flashcard {
     this.solvedAt,
     DateTime? createdAt,
     this.lastViewedAt,
-  }) : 
-    markdownContent = content ?? '', // Ensure content is not null
-    question = question ?? _extractQuestion(content ?? ''),
-    solution = solution ?? _extractSolution(content ?? ''),
+  }) :
+    markdownContent = content,
+    question = question ?? _extractQuestion(content),
+    solution = solution ?? _extractSolution(content),
     createdAt = createdAt ?? DateTime.now() {
       _contentParts = _splitContent(markdownContent);
       _questionContent = _contentParts.isNotEmpty ? _contentParts[0].trim() : '';

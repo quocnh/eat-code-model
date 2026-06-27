@@ -119,7 +119,7 @@ class DatabaseHelper {
         conditions.isEmpty ? '' : 'WHERE ${conditions.join(' AND ')}';
 
     final List<Map<String, dynamic>> maps = await db.rawQuery('''
-      SELECT f.*, p.solved_at 
+      SELECT f.*
       FROM flashcards f
       LEFT JOIN user_progress p ON f.id = p.flashcard_id
       $whereClause
@@ -133,7 +133,7 @@ class DatabaseHelper {
     Database db = await database;
 
     final List<Map<String, dynamic>> maps = await db.rawQuery('''
-      SELECT f.*, p.solved_at 
+      SELECT f.*
       FROM flashcards f
       INNER JOIN user_progress p ON f.id = p.flashcard_id
       WHERE f.category = ? AND p.is_completed = 1

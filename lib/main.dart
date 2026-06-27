@@ -4,7 +4,6 @@ import 'routes/app_routes.dart';
 import 'database/database_helper.dart';
 import 'services/navigation_service.dart';
 import 'services/model_download_service.dart';
-import 'services/llm_service.dart';
 import 'screens/model_setup_screen.dart';
 
 void main() {
@@ -30,7 +29,7 @@ class MyApp extends StatelessWidget {
       navigatorKey: NavigationService.navigatorKey,
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        primarySwatch: Colors.blue,
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         scaffoldBackgroundColor: Colors.grey[50],
         useMaterial3: true,
       ),

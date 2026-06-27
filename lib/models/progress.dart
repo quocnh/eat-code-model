@@ -31,8 +31,8 @@ class Progress {
       id: map['id'] as int?,
       flashcardId: map['flashcard_id'] as int,
       isCompleted: map['is_completed'] == 1,
-      confidenceLevel: map['confidence_level'] as int,
-      timesReviewed: map['times_reviewed'] as int,
+      confidenceLevel: map['confidence_level'] as int? ?? 0,
+      timesReviewed: map['times_reviewed'] as int? ?? 0,
       lastReviewedAt: map['last_reviewed_at'] != null 
         ? DateTime.parse(map['last_reviewed_at'] as String)
         : null,

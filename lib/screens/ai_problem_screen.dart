@@ -19,8 +19,9 @@ class AiProblemScreen extends StatefulWidget {
 }
 
 class _AiProblemScreenState extends State<AiProblemScreen> {
-  late LlmService _llmService;
-  late ProblemGenerator _generator;
+  LlmService? _llmService;
+  ProblemGenerator? _generator;
+  bool _llmInitialized = false;
 
   String _selectedCategory = 'Arrays';
   String _selectedDifficulty = 'Medium';
@@ -69,7 +70,11 @@ class _AiProblemScreenState extends State<AiProblemScreen> {
 
   @override
   void dispose() {
-    _llmService.dispose();
+    // Only dispose TemplateLlmService instances — GemmaLlmService is a
+    // process-wide singleton shared with AiChatButton and must not be torn down.
+    if (_llmInitialized && _llmService is TemplateLlmService) {
+      _llmService!.dispose();
+    }
     super.dispose();
   }
 
@@ -96,7 +101,8 @@ class _AiProblemScreenState extends State<AiProblemScreen> {
       _isGemmaMode = false;
     }
 
-    _generator = ProblemGenerator(_llmService);
+    _generator = ProblemGenerator(_llmService!);
+    _llmInitialized = true;
     if (mounted) {
       setState(() => _isInitializing = false);
     }
@@ -127,7 +133,7 @@ class _AiProblemScreenState extends State<AiProblemScreen> {
 
     try {
       // Stream tokens for the live preview
-      final stream = _generator.generateProblemStream(
+      final stream = _generator!.generateProblemStream(
         category: _selectedCategory,
         difficulty: _selectedDifficulty,
       );
@@ -138,7 +144,7 @@ class _AiProblemScreenState extends State<AiProblemScreen> {
       }
 
       // Parse the buffered output into a structured problem
-      final problem = await _generator.generateProblem(
+      final problem = await _generator!.generateProblem(
         category: _selectedCategory,
         difficulty: _selectedDifficulty,
       );

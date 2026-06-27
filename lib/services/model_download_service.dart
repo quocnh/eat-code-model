@@ -19,6 +19,7 @@ class ModelDownloadService {
 
   bool _isDownloading = false;
   double _downloadProgress = 0.0;
+  http.Client? _activeClient;
 
   bool get isDownloading => _isDownloading;
   double get downloadProgress => _downloadProgress;
@@ -62,8 +63,9 @@ class ModelDownloadService {
       final file = File(path);
 
       // Create a fresh HTTP request
+      _activeClient = http.Client();
       final request = http.Request('GET', Uri.parse(modelUrl));
-      final response = await http.Client().send(request);
+      final response = await _activeClient!.send(request);
 
       if (response.statusCode != 200) {
         throw Exception(
@@ -76,6 +78,13 @@ class ModelDownloadService {
 
       final sink = file.openWrite();
       await for (final chunk in response.stream) {
+        if (!_isDownloading) {
+          // cancelDownload() was called — abort cleanly
+          await sink.flush();
+          await sink.close();
+          _activeClient = null;
+          return;
+        }
         sink.add(chunk);
         received += chunk.length;
         _downloadProgress = received / contentLength;
@@ -86,17 +95,22 @@ class ModelDownloadService {
 
       _isDownloading = false;
       _downloadProgress = 1.0;
+      _activeClient = null;
       onComplete();
     } catch (e) {
+      // If _isDownloading is already false here, cancelDownload() was called —
+      // the client close threw; treat it as a user-initiated abort, not an error.
+      final wasCancelled = !_isDownloading;
       _isDownloading = false;
       _downloadProgress = 0.0;
+      _activeClient = null;
       // Clean up partial file
       try {
         final path = await modelPath;
         final file = File(path);
         if (file.existsSync()) await file.delete();
       } catch (_) {}
-      onError(e.toString());
+      if (!wasCancelled) onError(e.toString());
     }
   }
 
@@ -109,11 +123,11 @@ class ModelDownloadService {
     }
   }
 
-  /// Cancel in-progress download by aborting (sets flag; caller should handle UI)
+  /// Cancel in-progress download by closing the HTTP connection.
   void cancelDownload() {
-    // Note: http.Client doesn't have built-in cancel on all platforms.
-    // We set the flag and let the stream error naturally when the client is closed.
     _isDownloading = false;
     _downloadProgress = 0.0;
+    _activeClient?.close();
+    _activeClient = null;
   }
 }
