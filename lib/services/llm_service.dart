@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_gemma/flutter_gemma.dart';
 import 'model_download_service.dart';
 
@@ -31,6 +33,12 @@ class GemmaLlmService implements LlmService {
   Future<void>? _initFuture; // serialise concurrent calls
   final _fallback = TemplateLlmService();
 
+  /// Whether we have already consumed [FlutterGemmaPlugin.instance.isInitialized]
+  /// in a previous init attempt. The plugin's internal completer is permanent
+  /// (not reset between attempts), so awaiting it a second time replays the
+  /// stored result — which may be a stale error even if native re-init succeeded.
+  bool _isInitializedConsumed = false;
+
   @override
   bool get isModelLoaded => _isLoaded;
 
@@ -47,11 +55,31 @@ class GemmaLlmService implements LlmService {
     return _initFuture;
   }
 
+  /// Clears the init state so the next [initialize] call retries the
+  /// on-device Gemma model. Always call this before re-initializing after
+  /// the model file has just been downloaded.
+  void reset() {
+    _isLoaded = false;
+    _attempted = false;
+    _initFuture = null;
+    // Do NOT reset _isInitializedConsumed — the plugin's internal completer
+    // is permanent, so we must keep skipping isInitialized on subsequent retries.
+  }
+
   Future<void> _doInitialize() async {
     _attempted = true;
 
+    // iOS Simulator has no Metal GPU — MediaPipe will JIT-crash the native
+    // layer before Dart's try-catch can handle it. Skip native init entirely.
+    if (Platform.isIOS &&
+        Platform.environment.containsKey('SIMULATOR_DEVICE_NAME')) {
+      await _fallback.initialize();
+      return;
+    }
+
     final downloader = ModelDownloadService();
     final isDownloaded = await downloader.isModelDownloaded();
+    debugPrint('[GemmaLlmService] model downloaded: $isDownloaded');
 
     if (!isDownloaded) {
       await _fallback.initialize();
@@ -59,19 +87,59 @@ class GemmaLlmService implements LlmService {
     }
 
     try {
+      debugPrint(
+          '[GemmaLlmService] calling FlutterGemmaPlugin.instance.init()');
       await FlutterGemmaPlugin.instance.init(
         maxTokens: 1024,
         temperature: 0.8,
         randomSeed: 1,
         topK: 40,
       );
-      // The plugin swallows PlatformException into an internal Completer without
-      // rethrowing. Awaiting isInitialized propagates the stored error to this
-      // catch block AND prevents it from escaping as an unhandled Future error.
-      await FlutterGemmaPlugin.instance.isInitialized;
-      _isLoaded = true;
-    } catch (_) {
+      debugPrint(
+          '[GemmaLlmService] init() returned — checking initialization state');
+
+      // The plugin stores init success/failure in an internal permanent Completer.
+      // On the FIRST attempt we await it to surface any native error.
+      // On subsequent retries the completer is already completed (possibly with
+      // a stale error), so we skip it and assume success if init() didn't throw.
+      bool initialized;
+      if (!_isInitializedConsumed) {
+        _isInitializedConsumed = true;
+        try {
+          initialized = await FlutterGemmaPlugin.instance.isInitialized;
+          debugPrint('[GemmaLlmService] isInitialized = $initialized');
+        } catch (e) {
+          debugPrint('[GemmaLlmService] isInitialized threw: $e');
+          initialized = false;
+        }
+      } else {
+        // Completer already consumed (stuck from a prior failed attempt).
+        // Validate with a quick non-streaming request; if native never initialised
+        // this will throw or time-out rather than hanging the EventChannel forever.
+        debugPrint(
+            '[GemmaLlmService] validating with health-check getResponse');
+        try {
+          final test = await FlutterGemmaPlugin.instance
+              .getResponse(prompt: 'ok')
+              .timeout(const Duration(seconds: 30));
+          initialized = test != null;
+          debugPrint('[GemmaLlmService] health-check result: $test');
+        } catch (e) {
+          debugPrint('[GemmaLlmService] health-check failed: $e');
+          initialized = false;
+        }
+      }
+
+      if (initialized) {
+        _isLoaded = true;
+        debugPrint('[GemmaLlmService] Gemma ready');
+      } else {
+        debugPrint('[GemmaLlmService] native init failed — using fallback');
+        await _fallback.initialize();
+      }
+    } catch (e, st) {
       // Model file corrupt, unsupported device, or native init failed — use fallback
+      debugPrint('[GemmaLlmService] init error: $e\n$st');
       await _fallback.initialize();
     }
   }
@@ -80,9 +148,13 @@ class GemmaLlmService implements LlmService {
   Future<String> generate(String prompt) async {
     if (!_isLoaded) return _fallback.generate(prompt);
     try {
-      return await FlutterGemmaPlugin.instance.getResponse(prompt: prompt) ??
+      return await FlutterGemmaPlugin.instance
+              .getResponse(prompt: prompt)
+              .timeout(const Duration(seconds: 60)) ??
           '';
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[GemmaLlmService] generate error: $e');
+      _isLoaded = false;
       return _fallback.generate(prompt);
     }
   }
@@ -93,13 +165,25 @@ class GemmaLlmService implements LlmService {
       yield* _fallback.generateStream(prompt);
       return;
     }
+    bool gotAny = false;
     try {
-      await for (final chunk
-          in FlutterGemmaPlugin.instance.getResponseAsync(prompt: prompt)) {
-        if (chunk != null) yield chunk;
+      await for (final chunk in FlutterGemmaPlugin.instance
+          .getResponseAsync(prompt: prompt)
+          // 60 s without a new token → assume native is stuck
+          .timeout(const Duration(seconds: 60))) {
+        if (chunk != null) {
+          gotAny = true;
+          yield chunk;
+        }
       }
-    } catch (_) {
-      yield* _fallback.generateStream(prompt);
+    } catch (e) {
+      debugPrint('[GemmaLlmService] generateStream error: $e');
+      if (!gotAny) {
+        // Native Gemma is unresponsive — disable it so future calls
+        // go straight to fallback without hanging.
+        _isLoaded = false;
+        yield* _fallback.generateStream(prompt);
+      }
     }
   }
 

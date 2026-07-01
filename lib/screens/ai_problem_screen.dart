@@ -91,13 +91,15 @@ class _AiProblemScreenState extends State<AiProblemScreen> {
         _isGemmaMode = true;
       } catch (_) {
         // Model file exists but init failed — fall back to templates
-        _llmService = TemplateLlmService();
-        await _llmService.initialize();
+        final fallbackService = TemplateLlmService();
+        await fallbackService.initialize();
+        _llmService = fallbackService;
         _isGemmaMode = false;
       }
     } else {
-      _llmService = TemplateLlmService();
-      await _llmService.initialize();
+      final fallbackService = TemplateLlmService();
+      await fallbackService.initialize();
+      _llmService = fallbackService;
       _isGemmaMode = false;
     }
 
@@ -114,7 +116,9 @@ class _AiProblemScreenState extends State<AiProblemScreen> {
       MaterialPageRoute(
         builder: (_) => ModelSetupScreen(
           onSetupComplete: () {
-            // Re-initialize with Gemma after download completes
+            // Reset the singleton so _attempted / _initFuture are cleared
+            // before _initializeLlm() retries the on-device model.
+            GemmaLlmService().reset();
             setState(() => _isInitializing = true);
             _initializeLlm();
           },

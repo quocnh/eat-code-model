@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/flashcard.dart';
+import '../screens/model_setup_screen.dart';
 import '../services/llm_service.dart';
 import '../styles/colors.dart';
 
@@ -234,11 +235,9 @@ class _ChatHistoryStore {
 
   final Map<String, List<_ChatMessage>> _byCard = {};
 
-  String _keyFor(Flashcard? card) =>
-      card?.id?.toString() ?? '__global__';
+  String _keyFor(Flashcard? card) => card?.id?.toString() ?? '__global__';
 
-  List<_ChatMessage> get(Flashcard? card) =>
-      _byCard[_keyFor(card)] ?? const [];
+  List<_ChatMessage> get(Flashcard? card) => _byCard[_keyFor(card)] ?? const [];
 
   void set(Flashcard? card, List<_ChatMessage> messages) {
     _byCard[_keyFor(card)] = List<_ChatMessage>.from(messages);
@@ -349,10 +348,9 @@ class _AiChatButtonState extends State<AiChatButton>
                   // Snap to nearest horizontal edge for a polished feel.
                   setState(() {
                     _isDragging = false;
-                    final snappedX =
-                        _pos!.dx + 36 < constraints.maxWidth / 2
-                            ? 12.0
-                            : constraints.maxWidth - 72 - 12;
+                    final snappedX = _pos!.dx + 36 < constraints.maxWidth / 2
+                        ? 12.0
+                        : constraints.maxWidth - 72 - 12;
                     _pos = Offset(snappedX, _pos!.dy);
                   });
                 },
@@ -558,8 +556,7 @@ class _AiChatSheetState extends State<_AiChatSheet> {
       if (widget.card != null) {
         _messages.add(_ChatMessage(
           role: 'assistant',
-          text:
-              'Cleared. Ask me anything about **${widget.card!.title}**.',
+          text: 'Cleared. Ask me anything about **${widget.card!.title}**.',
         ));
       } else {
         _messages.add(const _ChatMessage(
@@ -764,15 +761,15 @@ class _AiChatSheetState extends State<_AiChatSheet> {
                       tooltip: 'Clear conversation',
                       onPressed: _isGenerating ? null : _clearHistory,
                       padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(
-                          minWidth: 36, minHeight: 36),
+                      constraints:
+                          const BoxConstraints(minWidth: 36, minHeight: 36),
                     ),
                     IconButton(
                       icon: const Icon(Icons.close, size: 20),
                       onPressed: () => Navigator.pop(context),
                       padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(
-                          minWidth: 36, minHeight: 36),
+                      constraints:
+                          const BoxConstraints(minWidth: 36, minHeight: 36),
                     ),
                   ],
                 ),
@@ -780,6 +777,8 @@ class _AiChatSheetState extends State<_AiChatSheet> {
             ),
           ),
           const Divider(height: 16),
+          // AI setup nudge — only shown when Gemma is not loaded
+          if (!_gemma.isModelLoaded) _buildAiSetupBanner(context),
           // Messages
           Expanded(
             child: ListView.builder(
@@ -835,6 +834,69 @@ class _AiChatSheetState extends State<_AiChatSheet> {
                   ),
                 ),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Orange banner at the top of the chat — nudges the user to download the
+  /// on-device model when the service is running in template-fallback mode.
+  Widget _buildAiSetupBanner(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange.shade200),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.memory_outlined, color: Colors.orange.shade700, size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Template mode — download the AI model for real on-device answers.',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.orange.shade900,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: () {
+              // Capture the navigator before popping the sheet.
+              final nav = Navigator.of(context);
+              nav.pop();
+              nav.push(MaterialPageRoute(
+                builder: (_) => ModelSetupScreen(
+                  onSetupComplete: () {
+                    // Reset the singleton so _attempted / _initFuture are
+                    // cleared — otherwise initialize() short-circuits to
+                    // template mode even though the model is now on disk.
+                    GemmaLlmService().reset();
+                    GemmaLlmService().initialize().catchError((_) {});
+                  },
+                ),
+              ));
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade700,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Text(
+                'Enable AI',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
           ),
         ],

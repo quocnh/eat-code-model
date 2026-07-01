@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import '../database/database_helper.dart';
 import '../models/flashcard.dart';
+import '../models/generated_problem.dart';
+import '../services/llm_service.dart';
+import '../services/problem_generator.dart';
 import '../styles/colors.dart';
 import '../styles/text_styles.dart';
 import '../widgets/company_logo.dart';
@@ -25,10 +28,22 @@ class _CompanyProblemScreenState extends State<CompanyProblemScreen> {
   List<Flashcard> _cards = [];
   bool _isLoading = true;
 
+  // AI generation
+  ProblemGenerator? _generator;
+
   @override
   void initState() {
     super.initState();
     _loadCards();
+    _initGenerator();
+  }
+
+  Future<void> _initGenerator() async {
+    final svc = GemmaLlmService();
+    await svc.initialize().catchError((_) {});
+    if (mounted) {
+      setState(() => _generator = ProblemGenerator(svc));
+    }
   }
 
   Future<void> _loadCards() async {
@@ -80,6 +95,19 @@ class _CompanyProblemScreenState extends State<CompanyProblemScreen> {
             _openProblemDetail(updated);
           }
         },
+      ),
+    );
+  }
+
+  void _showGenerateSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _GenerateSheet(
+        company: widget.company,
+        generator: _generator,
+        onSaved: _loadCards,
       ),
     );
   }
@@ -200,6 +228,13 @@ class _CompanyProblemScreenState extends State<CompanyProblemScreen> {
           Text('${widget.company} Problems'),
         ]),
       ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _showGenerateSheet,
+        icon: const Icon(Icons.auto_awesome),
+        label: const Text('Generate'),
+        backgroundColor: AppColors.primary,
+        foregroundColor: Colors.white,
+      ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _cards.isEmpty
@@ -229,10 +264,9 @@ class _CompanyProblemScreenState extends State<CompanyProblemScreen> {
                         child: ListView.separated(
                           padding: const EdgeInsets.only(bottom: 24),
                           itemCount: _cards.length,
-                          separatorBuilder: (_, __) => Divider(
-                              height: 1, color: Colors.grey.shade100),
-                          itemBuilder: (_, i) =>
-                              _buildProblemRow(_cards[i], i),
+                          separatorBuilder: (_, __) =>
+                              Divider(height: 1, color: Colors.grey.shade100),
+                          itemBuilder: (_, i) => _buildProblemRow(_cards[i], i),
                         ),
                       ),
                     ],
@@ -305,8 +339,8 @@ class _ProblemDetailSheetState extends State<_ProblemDetailSheet> {
               child: Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                       color: _diffColor(card.difficulty).withOpacity(0.15),
                       borderRadius: BorderRadius.circular(8),
@@ -322,8 +356,8 @@ class _ProblemDetailSheetState extends State<_ProblemDetailSheet> {
                   ),
                   const SizedBox(width: 6),
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                       color: AppColors.primary.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(8),
@@ -477,3 +511,413 @@ class _SegmentedToggle extends StatelessWidget {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Generate company-style problem sheet
+// ---------------------------------------------------------------------------
+
+class _GenerateSheet extends StatefulWidget {
+  final String company;
+  final ProblemGenerator? generator;
+  final VoidCallback onSaved;
+
+  const _GenerateSheet({
+    required this.company,
+    required this.generator,
+    required this.onSaved,
+  });
+
+  @override
+  State<_GenerateSheet> createState() => _GenerateSheetState();
+}
+
+class _GenerateSheetState extends State<_GenerateSheet> {
+  String _difficulty = 'Medium';
+  bool _isGenerating = false;
+  bool _isSaving = false;
+  GeneratedProblem? _result;
+  String? _error;
+  String _streamBuffer = '';
+
+  final List<String> _difficulties = ['Easy', 'Medium', 'Hard'];
+
+  Color _diffColor(String d) {
+    switch (d.toLowerCase()) {
+      case 'easy':
+        return AppColors.easy;
+      case 'hard':
+        return AppColors.hard;
+      default:
+        return AppColors.medium;
+    }
+  }
+
+  Future<void> _generate() async {
+    if (widget.generator == null) return;
+    setState(() {
+      _isGenerating = true;
+      _result = null;
+      _error = null;
+      _streamBuffer = '';
+    });
+
+    try {
+      // Stream tokens for a live preview
+      final stream = widget.generator!.generateCompanyProblemStream(
+        company: widget.company,
+        difficulty: _difficulty,
+      );
+      await for (final chunk in stream) {
+        if (mounted) setState(() => _streamBuffer += chunk);
+      }
+
+      // Parse the completed response into a structured problem
+      final problem = await widget.generator!.generateCompanyProblem(
+        company: widget.company,
+        difficulty: _difficulty,
+      );
+      if (mounted) {
+        setState(() {
+          _result = problem;
+          _isGenerating = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = 'Generation failed. Please try again.';
+          _isGenerating = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _saveToCompany() async {
+    if (_result == null) return;
+    setState(() => _isSaving = true);
+    try {
+      final db = DatabaseHelper();
+      final flashcard = Flashcard(
+        title: _result!.title,
+        content: _result!.toMarkdownContent(),
+        difficulty: _result!.difficulty,
+        category: _result!.category,
+        company: widget.company,
+        isPremium: false,
+      );
+      await db.insertFlashcard(flashcard);
+      widget.onSaved();
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Added to ${widget.company} problems!'),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isSaving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to save. Please try again.'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final profile = companyProfiles[widget.company];
+    final aiMode = widget.generator != null && GemmaLlmService().isModelLoaded;
+
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.72,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        children: [
+          // Drag handle
+          Container(
+            margin: const EdgeInsets.only(top: 12),
+            width: 44,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.grey[300],
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          // Header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+            child: Row(
+              children: [
+                const Icon(Icons.auto_awesome,
+                    color: AppColors.primary, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Generate ${widget.company}-style Problem',
+                    style: AppTextStyles.heading2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                // Mode badge
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: aiMode
+                        ? AppColors.success.withOpacity(0.12)
+                        : Colors.orange.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    aiMode ? 'On-device AI' : 'Template',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color:
+                          aiMode ? AppColors.success : Colors.orange.shade700,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                IconButton(
+                  icon: const Icon(Icons.close, size: 20),
+                  onPressed: () => Navigator.pop(context),
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints(minWidth: 36, minHeight: 36),
+                ),
+              ],
+            ),
+          ),
+          if (profile != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
+              child: Text(
+                profile['note'] as String,
+                style: AppTextStyles.body2
+                    .copyWith(fontStyle: FontStyle.italic, fontSize: 12),
+              ),
+            ),
+          const SizedBox(height: 12),
+          // Difficulty selector
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              children: [
+                Text('Difficulty:', style: AppTextStyles.body2),
+                const SizedBox(width: 12),
+                ..._difficulties.map((d) {
+                  final selected = _difficulty == d;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: GestureDetector(
+                      onTap: _isGenerating
+                          ? null
+                          : () => setState(() => _difficulty = d),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 150),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 7),
+                        decoration: BoxDecoration(
+                          color: selected
+                              ? _diffColor(d)
+                              : _diffColor(d).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          d,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: selected ? Colors.white : _diffColor(d),
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          // Generate button
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: (_isGenerating || widget.generator == null)
+                    ? null
+                    : _generate,
+                icon: _isGenerating
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.auto_awesome, size: 18),
+                label: Text(_isGenerating ? 'Generating…' : 'Generate Problem'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          const Divider(height: 1),
+          // Result area
+          Expanded(
+            child: _error != null
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(_error!,
+                          style: AppTextStyles.body2
+                              .copyWith(color: AppColors.error),
+                          textAlign: TextAlign.center),
+                    ),
+                  )
+                : _result != null
+                    ? _buildResultView()
+                    : _streamBuffer.isNotEmpty
+                        ? SingleChildScrollView(
+                            padding: const EdgeInsets.all(20),
+                            child: Text(
+                              _streamBuffer,
+                              style: AppTextStyles.body2
+                                  .copyWith(fontFamily: 'monospace'),
+                            ),
+                          )
+                        : Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(24),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.auto_awesome,
+                                      size: 48,
+                                      color: AppColors.textSecondary
+                                          .withOpacity(0.3)),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    'Choose a difficulty and tap Generate.',
+                                    style: AppTextStyles.body2,
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildResultView() {
+    final p = _result!;
+    return Column(
+      children: [
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Title + tags
+                Text(p.title,
+                    style: AppTextStyles.heading1.copyWith(fontSize: 16)),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: _diffColor(p.difficulty).withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        p.difficulty,
+                        style: TextStyle(
+                            color: _diffColor(p.difficulty),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        p.category,
+                        style: const TextStyle(
+                            color: AppColors.primary,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(p.description, style: AppTextStyles.body2),
+                if (p.timeComplexity.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    '⏱ Time: ${p.timeComplexity}   💾 Space: ${p.spaceComplexity}',
+                    style: AppTextStyles.body2.copyWith(fontSize: 12),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        // Save button
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+          child: SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _isSaving ? null : _saveToCompany,
+              icon: _isSaving
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : const Icon(Icons.add_circle_outline, size: 18),
+              label: Text(
+                  _isSaving ? 'Saving…' : 'Add to ${widget.company} Problems'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.success,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 13),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
