@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
-import '../models/technique.dart';
-import '../data/training_data.dart';
+import '../data/learning_path_data.dart';
+import '../models/learning_path.dart';
+import '../services/path_progress_service.dart';
 import '../styles/colors.dart';
 import '../styles/text_styles.dart';
-import 'technique_detail_screen.dart';
 import 'ai_problem_screen.dart';
+import 'learning_path_detail_screen.dart';
 
 class TrainingScreen extends StatefulWidget {
   const TrainingScreen({super.key});
@@ -14,41 +15,7 @@ class TrainingScreen extends StatefulWidget {
 }
 
 class TrainingScreenState extends State<TrainingScreen> {
-  String _selectedCategory = 'All';
-
-  final List<String> _categories = [
-    'All',
-    'Fundamental',
-    'Tree/Graph',
-    'Advanced',
-    'Optimization',
-  ];
-
-  List<Technique> get _filteredTechniques {
-    if (_selectedCategory == 'All') return TrainingData.techniques;
-    return TrainingData.getByCategory(_selectedCategory);
-  }
-
-  Map<String, List<Technique>> get _groupedTechniques {
-    final Map<String, List<Technique>> grouped = {};
-    for (final technique in _filteredTechniques) {
-      grouped.putIfAbsent(technique.category, () => []).add(technique);
-    }
-    return grouped;
-  }
-
-  Color _difficultyColor(String difficulty) {
-    switch (difficulty) {
-      case 'Beginner':
-        return AppColors.success;
-      case 'Intermediate':
-        return AppColors.warning;
-      case 'Advanced':
-        return AppColors.error;
-      default:
-        return AppColors.textSecondary;
-    }
-  }
+  final _progress = PathProgressService();
 
   @override
   Widget build(BuildContext context) {
@@ -72,32 +39,33 @@ class TrainingScreenState extends State<TrainingScreen> {
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (_) => const AiProblemScreen(),
-                ),
+                MaterialPageRoute(builder: (_) => const AiProblemScreen()),
               );
             },
           ),
         ],
       ),
-      body: Column(
+      body: ListView(
+        padding: const EdgeInsets.only(bottom: 32),
         children: [
           _buildAiBanner(context),
-          _buildCategoryFilter(),
-          Expanded(child: _buildTechniqueList()),
+          _buildSectionHeader(),
+          ...LearningPathData.paths.map((path) => _buildPathCard(path)),
         ],
       ),
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // AI Banner (unchanged from before — keeps AI feature visible)
+  // ---------------------------------------------------------------------------
+
   Widget _buildAiBanner(BuildContext context) {
     return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const AiProblemScreen()),
-        );
-      },
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const AiProblemScreen()),
+      ),
       child: Container(
         margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
         padding: const EdgeInsets.all(16),
@@ -124,8 +92,7 @@ class TrainingScreenState extends State<TrainingScreen> {
                 color: Colors.white.withOpacity(0.2),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child:
-                  const Icon(Icons.psychology, color: Colors.white, size: 28),
+              child: const Icon(Icons.psychology, color: Colors.white, size: 28),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -158,207 +125,202 @@ class TrainingScreenState extends State<TrainingScreen> {
     );
   }
 
-  Widget _buildCategoryFilter() {
-    return Container(
-      height: 44,
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemCount: _categories.length,
-        itemBuilder: (context, index) {
-          final category = _categories[index];
-          final isSelected = _selectedCategory == category;
-          return Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: FilterChip(
-              label: Text(
-                category,
-                style: TextStyle(
-                  color: isSelected ? Colors.white : AppColors.textPrimary,
-                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                  fontSize: 13,
-                ),
-              ),
-              selected: isSelected,
-              onSelected: (_) {
-                setState(() => _selectedCategory = category);
-              },
-              backgroundColor: Colors.white,
-              selectedColor: AppColors.primary,
-              checkmarkColor: Colors.white,
-              side: BorderSide(
-                color: isSelected ? AppColors.primary : Colors.grey.shade300,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
-            ),
-          );
-        },
+  // ---------------------------------------------------------------------------
+  // Section header
+  // ---------------------------------------------------------------------------
+
+  Widget _buildSectionHeader() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Learning Paths',
+            style: AppTextStyles.heading2.copyWith(fontSize: 18),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Follow each path in order. Unlock the Interview Challenge when you\'re ready.',
+            style: AppTextStyles.body2,
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildTechniqueList() {
-    final grouped = _groupedTechniques;
-    if (grouped.isEmpty) {
-      return const Center(
-        child: Text(
-          'No techniques found.',
-          style: AppTextStyles.body2,
-        ),
-      );
-    }
+  // ---------------------------------------------------------------------------
+  // Path card
+  // ---------------------------------------------------------------------------
 
-    final categoryOrder = [
-      'Fundamental',
-      'Tree/Graph',
-      'Advanced',
-      'Optimization',
-    ];
+  Widget _buildPathCard(LearningPath path) {
+    final techniqueIds = path.nodes
+        .where((n) => n.techniqueId != null)
+        .map((n) => n.techniqueId!)
+        .toList();
+    final visited = _progress.countVisited(techniqueIds);
+    final total = path.techniqueCount;
+    final progressFraction = total > 0 ? visited / total : 0.0;
+    final isStarted = visited > 0;
 
-    final orderedKeys = categoryOrder
-        .where((cat) => grouped.containsKey(cat))
-        .toList()
-      ..addAll(grouped.keys.where((k) => !categoryOrder.contains(k)));
-
-    return ListView.builder(
-      padding: const EdgeInsets.only(bottom: 24),
-      itemCount: _selectedCategory == 'All' ? orderedKeys.length : 1,
-      itemBuilder: (context, index) {
-        final category =
-            _selectedCategory == 'All' ? orderedKeys[index] : _selectedCategory;
-        final techniques = grouped[category] ?? [];
-        return _buildCategorySection(category, techniques);
-      },
-    );
-  }
-
-  Widget _buildCategorySection(String category, List<Technique> techniques) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (_selectedCategory == 'All')
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
-            child: Text(
-              category,
-              style: AppTextStyles.heading2.copyWith(
-                color: AppColors.textSecondary,
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.8,
-              ),
-            ),
-          ),
-        ...techniques.map((t) => _buildTechniqueCard(t)),
-      ],
-    );
-  }
-
-  Widget _buildTechniqueCard(Technique technique) {
-    final diffColor = _difficultyColor(technique.difficulty);
     return GestureDetector(
       onTap: () {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => TechniqueDetailScreen(technique: technique),
+            builder: (_) => LearningPathDetailScreen(path: path),
           ),
-        );
+        ).then((_) => setState(() {}));
       },
       child: Container(
-        margin: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-        padding: const EdgeInsets.all(16),
+        margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 6,
-              offset: const Offset(0, 2),
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
             ),
           ],
         ),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Colored header strip
             Container(
-              width: 48,
-              height: 48,
-              alignment: Alignment.center,
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
               decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(12),
+                color: path.color.withOpacity(0.08),
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(16),
+                  topRight: Radius.circular(16),
+                ),
               ),
-              child: Text(
-                technique.icon,
-                style: const TextStyle(fontSize: 24),
+              child: Row(
+                children: [
+                  // Emoji badge
+                  Container(
+                    width: 52,
+                    height: 52,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: path.color.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Text(
+                      path.emoji,
+                      style: const TextStyle(fontSize: 28),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          path.name,
+                          style: AppTextStyles.body1.copyWith(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                            color: path.color,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          path.difficulty,
+                          style: TextStyle(
+                            color: path.color.withOpacity(0.7),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(
+                    Icons.arrow_forward_ios,
+                    size: 14,
+                    color: path.color.withOpacity(0.6),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(width: 14),
-            Expanded(
+
+            // Body
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Text(path.description, style: AppTextStyles.body2),
+                  const SizedBox(height: 12),
+
+                  // Topic chain preview
+                  _buildTopicChainPreview(path),
+
+                  const SizedBox(height: 14),
+
+                  // Progress row
                   Row(
                     children: [
                       Expanded(
-                        child: Text(
-                          technique.name,
-                          style: AppTextStyles.body1.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: diffColor.withOpacity(0.12),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          technique.difficulty,
-                          style: TextStyle(
-                            color: diffColor,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    technique.shortDescription,
-                    style: AppTextStyles.body2,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      Icon(Icons.timer_outlined,
-                          size: 13, color: AppColors.textSecondary),
-                      const SizedBox(width: 4),
-                      Flexible(
-                        child: Text(
-                          technique.timeComplexity,
-                          style: AppTextStyles.body2.copyWith(fontSize: 12),
-                          overflow: TextOverflow.ellipsis,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  isStarted
+                                      ? '$visited / $total topics done'
+                                      : '${path.techniqueCount} topics + Interview',
+                                  style: AppTextStyles.body2.copyWith(
+                                    fontSize: 12,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                                if (isStarted)
+                                  Text(
+                                    '${(progressFraction * 100).round()}%',
+                                    style: TextStyle(
+                                      color: path.color,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: LinearProgressIndicator(
+                                value: progressFraction,
+                                backgroundColor: path.color.withOpacity(0.1),
+                                valueColor:
+                                    AlwaysStoppedAnimation<Color>(path.color),
+                                minHeight: 5,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       const SizedBox(width: 12),
-                      Icon(Icons.memory_outlined,
-                          size: 13, color: AppColors.textSecondary),
-                      const SizedBox(width: 4),
-                      Flexible(
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: path.color,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
                         child: Text(
-                          technique.spaceComplexity,
-                          style: AppTextStyles.body2.copyWith(fontSize: 12),
-                          overflow: TextOverflow.ellipsis,
+                          isStarted ? 'Continue' : 'Start',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ],
@@ -366,12 +328,98 @@ class TrainingScreenState extends State<TrainingScreen> {
                 ],
               ),
             ),
-            const SizedBox(width: 8),
-            Icon(Icons.arrow_forward_ios,
-                size: 14, color: AppColors.textSecondary),
           ],
         ),
       ),
     );
+  }
+
+  /// Shows a compact horizontal preview of the topic nodes in the path.
+  Widget _buildTopicChainPreview(LearningPath path) {
+    final allNodes = path.nodes;
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          for (int i = 0; i < allNodes.length; i++) ...[
+            _buildMiniNode(allNodes[i], path.color),
+            if (i < allNodes.length - 1)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Icon(
+                  Icons.arrow_forward,
+                  size: 12,
+                  color: path.color.withOpacity(0.4),
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMiniNode(PathNode node, Color color) {
+    final isInterview = node.type == PathNodeType.interviewChallenge;
+    final visited = node.techniqueId != null
+        ? _progress.isVisited(node.techniqueId!)
+        : false;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: isInterview
+            ? color
+            : visited
+                ? color.withOpacity(0.15)
+                : Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isInterview
+              ? color
+              : visited
+                  ? color.withOpacity(0.4)
+                  : Colors.grey.shade300,
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(node.icon, style: const TextStyle(fontSize: 12)),
+          const SizedBox(width: 4),
+          Text(
+            _shortName(node.displayName),
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              color: isInterview
+                  ? Colors.white
+                  : visited
+                      ? color
+                      : AppColors.textSecondary,
+            ),
+          ),
+          if (visited && !isInterview) ...[
+            const SizedBox(width: 3),
+            Icon(Icons.check_circle, size: 10, color: color),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _shortName(String name) {
+    const overrides = {
+      'Dynamic Programming 1D': 'DP 1D',
+      'Dynamic Programming 2D': 'DP 2D',
+      'BFS / Tree Traversal': 'BFS',
+      'DFS / Backtracking': 'DFS',
+      'Heap / Priority Queue': 'Heap',
+      'Trie (Prefix Tree)': 'Trie',
+      'Interview Challenge': 'Interview',
+      'Hash Map / Set': 'Hash Map',
+      'Monotonic Stack': 'Mono Stack',
+    };
+    return overrides[name] ?? name;
   }
 }

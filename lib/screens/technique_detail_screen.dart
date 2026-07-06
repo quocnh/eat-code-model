@@ -4,6 +4,7 @@ import '../models/technique.dart';
 import '../styles/colors.dart';
 import '../styles/text_styles.dart';
 import 'ai_problem_screen.dart';
+import 'interview_simulation_screen.dart';
 
 class TechniqueDetailScreen extends StatelessWidget {
   final Technique technique;
@@ -485,6 +486,87 @@ class TechniqueDetailScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ----------------------------------------------------------------
+          // Interview Simulation CTA
+          // ----------------------------------------------------------------
+          GestureDetector(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => InterviewSimulationScreen(
+                    technique: technique,
+                    pathName: technique.category,
+                    pathColor: AppColors.primary,
+                  ),
+                ),
+              );
+            },
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF1565C0), Color(0xFF42A5F5)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.primary.withOpacity(0.3),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 50,
+                    height: 50,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child:
+                        const Text('🎯', style: TextStyle(fontSize: 26)),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Interview Simulation',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Practice ${technique.name} in a real interview format — hints, complexity, trade-offs.',
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.85),
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.arrow_forward_ios,
+                      color: Colors.white, size: 15),
+                ],
+              ),
+            ),
+          ),
+
+          // ----------------------------------------------------------------
+          // Related problems
+          // ----------------------------------------------------------------
           _buildSection(
             title: 'Related Problems',
             icon: Icons.assignment_outlined,
