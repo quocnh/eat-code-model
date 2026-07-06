@@ -61,7 +61,7 @@ public class FlutterGemmaPlugin: NSObject, FlutterPlugin {
                         }
                     }, completion: {
                         DispatchQueue.main.async {
-                            self.eventSink?(nil)
+                            self.eventSink?(FlutterEndOfEventStream)
                             result(nil)
                         }
                     })

@@ -7,11 +7,14 @@ import 'services/model_download_service.dart';
 import 'screens/model_setup_screen.dart';
 
 void main() {
-  WidgetsFlutterBinding.ensureInitialized();
-  // Absorb unhandled async errors (e.g. platform-channel failures from
-  // MediaPipe/Gemma) so they never reach dart_vm_initializer and crash the app.
+  // ensureInitialized must be in the same zone as runApp to avoid zone-mismatch
+  // warnings that can mask real errors. runZonedGuarded absorbs uncaught async
+  // errors so a MediaPipe/Gemma channel error never crashes the whole app.
   runZonedGuarded(
-    () => runApp(const MyApp()),
+    () {
+      WidgetsFlutterBinding.ensureInitialized();
+      runApp(const MyApp());
+    },
     (error, stack) {
       // Log but do not rethrow — the app continues in template-fallback mode.
       debugPrint('[EatCode] Caught zone error: $error');
