@@ -4,6 +4,7 @@ import 'routes/app_routes.dart';
 import 'database/database_helper.dart';
 import 'services/navigation_service.dart';
 import 'services/model_download_service.dart';
+import 'services/path_progress_service.dart';
 import 'screens/model_setup_screen.dart';
 
 void main() {
@@ -70,7 +71,10 @@ class _AppInitializerState extends State<_AppInitializer> {
   Future<void> _initialize() async {
     final dbHelper = DatabaseHelper();
 
-    // ── 1. Init DB ─────────────────────────────────────────────────────────
+    // ── 1. Load persisted user progress ────────────────────────────────────
+    await PathProgressService().init();
+
+    // ── 2. Init DB ─────────────────────────────────────────────────────────
     await dbHelper.database;
 
     // ── 2. Seed problems (TemplateLlmService, always works) ────────────────

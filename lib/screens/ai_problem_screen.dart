@@ -12,7 +12,10 @@ import 'model_setup_screen.dart';
 class AiProblemScreen extends StatefulWidget {
   final String? initialCategory;
 
-  const AiProblemScreen({super.key, this.initialCategory});
+  /// When set the screen auto-generates a problem similar to this one.
+  final String? initialProblem;
+
+  const AiProblemScreen({super.key, this.initialCategory, this.initialProblem});
 
   @override
   State<AiProblemScreen> createState() => _AiProblemScreenState();
@@ -107,6 +110,10 @@ class _AiProblemScreenState extends State<AiProblemScreen> {
     _llmInitialized = true;
     if (mounted) {
       setState(() => _isInitializing = false);
+      // Auto-generate immediately when a similar-problem context was provided
+      if (widget.initialProblem != null) {
+        _generateProblem();
+      }
     }
   }
 
@@ -135,12 +142,21 @@ class _AiProblemScreenState extends State<AiProblemScreen> {
       _errorMessage = null;
     });
 
+    final similarProblem = widget.initialProblem;
+
     try {
       // Stream tokens for the live preview
-      final stream = _generator!.generateProblemStream(
-        category: _selectedCategory,
-        difficulty: _selectedDifficulty,
-      );
+      final stream = similarProblem != null
+          ? _generator!.generateSimilarProblemStream(
+              problemName: similarProblem,
+              category: _selectedCategory,
+              difficulty: _selectedDifficulty,
+            )
+          : _generator!.generateProblemStream(
+              category: _selectedCategory,
+              difficulty: _selectedDifficulty,
+            );
+
       await for (final chunk in stream) {
         if (mounted) {
           setState(() => _streamBuffer += chunk);
@@ -148,10 +164,16 @@ class _AiProblemScreenState extends State<AiProblemScreen> {
       }
 
       // Parse the buffered output into a structured problem
-      final problem = await _generator!.generateProblem(
-        category: _selectedCategory,
-        difficulty: _selectedDifficulty,
-      );
+      final problem = similarProblem != null
+          ? await _generator!.generateSimilarProblem(
+              problemName: similarProblem,
+              category: _selectedCategory,
+              difficulty: _selectedDifficulty,
+            )
+          : await _generator!.generateProblem(
+              category: _selectedCategory,
+              difficulty: _selectedDifficulty,
+            );
 
       if (mounted) {
         setState(() {
@@ -234,6 +256,10 @@ class _AiProblemScreenState extends State<AiProblemScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (widget.initialProblem != null) ...[
+                    _buildSimilarProblemBanner(widget.initialProblem!),
+                    const SizedBox(height: 12),
+                  ],
                   _buildModelStatusCard(),
                   const SizedBox(height: 16),
                   _buildCategorySelector(),
@@ -246,6 +272,46 @@ class _AiProblemScreenState extends State<AiProblemScreen> {
                 ],
               ),
             ),
+    );
+  }
+
+  Widget _buildSimilarProblemBanner(String problemName) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.purple.withOpacity(0.07),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.purple.withOpacity(0.25)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.link, color: Colors.purple, size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Similar Problem Mode',
+                  style: TextStyle(
+                    color: Colors.purple,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Generating a problem inspired by: $problemName',
+                  style: const TextStyle(
+                    color: Colors.purple,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -452,7 +518,11 @@ class _AiProblemScreenState extends State<AiProblemScreen> {
               )
             : const Icon(Icons.auto_awesome),
         label: Text(
-          _isGenerating ? 'Generating…' : 'Generate Problem',
+          _isGenerating
+              ? 'Generating…'
+              : (widget.initialProblem != null
+                  ? 'Generate Similar Problem'
+                  : 'Generate Problem'),
           style: AppTextStyles.buttonText,
         ),
       ),
@@ -720,11 +790,11 @@ class _AiProblemScreenState extends State<AiProblemScreen> {
                   ),
                 ],
 
-                // Solution Approach
+                // ── Optimized solution ───────────────────────────────────
                 if (problem.solutionApproach.isNotEmpty) ...[
                   const SizedBox(height: 16),
                   _buildProblemSection(
-                    label: 'Solution Approach',
+                    label: '⚡ Optimized Approach',
                     child: Text(
                       problem.solutionApproach,
                       style: AppTextStyles.body1,
@@ -732,11 +802,10 @@ class _AiProblemScreenState extends State<AiProblemScreen> {
                   ),
                 ],
 
-                // Code
                 if (problem.code.isNotEmpty) ...[
                   const SizedBox(height: 16),
                   _buildProblemSection(
-                    label: 'Code',
+                    label: 'Optimized Code',
                     child: Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(12),
@@ -783,6 +852,46 @@ class _AiProblemScreenState extends State<AiProblemScreen> {
                     ),
                   ],
                 ),
+
+                // ── Brute force solution (when available) ────────────────
+                if (problem.bruteForceCode.isNotEmpty) ...[
+                  const SizedBox(height: 20),
+                  const Divider(height: 1),
+                  const SizedBox(height: 16),
+                  _buildProblemSection(
+                    label: '🐌 Brute Force Approach',
+                    child: Text(
+                      problem.bruteForceApproach.isNotEmpty
+                          ? problem.bruteForceApproach
+                          : 'Naive approach using nested iteration.',
+                      style: AppTextStyles.body1,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  _buildProblemSection(
+                    label: 'Brute Force Code',
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2D1B1B),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Text(
+                          problem.bruteForceCode,
+                          style: const TextStyle(
+                            fontFamily: 'Courier',
+                            color: Color(0xFFFFCDD2),
+                            fontSize: 13,
+                            height: 1.6,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
 
                 const SizedBox(height: 20),
 

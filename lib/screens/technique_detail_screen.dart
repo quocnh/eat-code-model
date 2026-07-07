@@ -604,6 +604,7 @@ class TechniqueDetailScreen extends StatelessWidget {
                           MaterialPageRoute(
                             builder: (_) => AiProblemScreen(
                               initialCategory: technique.category,
+                              initialProblem: problem,
                             ),
                           ),
                         );

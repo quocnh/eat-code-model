@@ -5,6 +5,8 @@ class GeneratedProblem {
   final List<String> constraints;
   final String solutionApproach;
   final String code;
+  final String bruteForceApproach;
+  final String bruteForceCode;
   final String timeComplexity;
   final String spaceComplexity;
   final String category;
@@ -19,6 +21,8 @@ class GeneratedProblem {
     required this.constraints,
     required this.solutionApproach,
     required this.code,
+    this.bruteForceApproach = '',
+    this.bruteForceCode = '',
     required this.timeComplexity,
     required this.spaceComplexity,
     required this.category,
@@ -29,6 +33,7 @@ class GeneratedProblem {
 
   /// Produces a markdown string that matches the existing flashcard format
   /// (## Question ... ## Solution ...) so it can be stored as a Flashcard.
+  /// Optimized solution is shown first; brute force follows if available.
   String toMarkdownContent() {
     final buffer = StringBuffer();
 
@@ -61,11 +66,13 @@ class GeneratedProblem {
 
     buffer.writeln('## Solution');
     buffer.writeln();
-    buffer.writeln('### Approach');
+
+    // ── Optimized solution first ─────────────────────────────────────────────
+    buffer.writeln('### ⚡ Optimized Approach');
     buffer.writeln();
     buffer.writeln(solutionApproach);
     buffer.writeln();
-    buffer.writeln('### Code');
+    buffer.writeln('### Optimized Code');
     buffer.writeln();
     buffer.writeln('```python');
     buffer.writeln(code);
@@ -75,6 +82,24 @@ class GeneratedProblem {
     buffer.writeln();
     buffer.writeln('- **Time:** $timeComplexity');
     buffer.writeln('- **Space:** $spaceComplexity');
+
+    // ── Brute force (only if present) ───────────────────────────────────────
+    if (bruteForceCode.isNotEmpty) {
+      buffer.writeln();
+      buffer.writeln('---');
+      buffer.writeln();
+      buffer.writeln('### 🐌 Brute Force Approach');
+      buffer.writeln();
+      buffer.writeln(bruteForceApproach.isNotEmpty
+          ? bruteForceApproach
+          : 'Naive approach using nested iteration.');
+      buffer.writeln();
+      buffer.writeln('### Brute Force Code');
+      buffer.writeln();
+      buffer.writeln('```python');
+      buffer.writeln(bruteForceCode);
+      buffer.writeln('```');
+    }
 
     return buffer.toString();
   }
@@ -87,6 +112,8 @@ class GeneratedProblem {
       'constraints': constraints.join('|||'),
       'solution_approach': solutionApproach,
       'code': code,
+      'brute_force_approach': bruteForceApproach,
+      'brute_force_code': bruteForceCode,
       'time_complexity': timeComplexity,
       'space_complexity': spaceComplexity,
       'category': category,
@@ -109,6 +136,8 @@ class GeneratedProblem {
       constraints: splitField(map['constraints']),
       solutionApproach: map['solution_approach'] as String? ?? '',
       code: map['code'] as String? ?? '',
+      bruteForceApproach: map['brute_force_approach'] as String? ?? '',
+      bruteForceCode: map['brute_force_code'] as String? ?? '',
       timeComplexity: map['time_complexity'] as String? ?? '',
       spaceComplexity: map['space_complexity'] as String? ?? '',
       category: map['category'] as String? ?? '',
@@ -127,6 +156,8 @@ class GeneratedProblem {
     List<String>? constraints,
     String? solutionApproach,
     String? code,
+    String? bruteForceApproach,
+    String? bruteForceCode,
     String? timeComplexity,
     String? spaceComplexity,
     String? category,
@@ -141,6 +172,8 @@ class GeneratedProblem {
       constraints: constraints ?? this.constraints,
       solutionApproach: solutionApproach ?? this.solutionApproach,
       code: code ?? this.code,
+      bruteForceApproach: bruteForceApproach ?? this.bruteForceApproach,
+      bruteForceCode: bruteForceCode ?? this.bruteForceCode,
       timeComplexity: timeComplexity ?? this.timeComplexity,
       spaceComplexity: spaceComplexity ?? this.spaceComplexity,
       category: category ?? this.category,

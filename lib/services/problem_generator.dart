@@ -99,10 +99,68 @@ Format:
 ## Space Complexity
 [Big-O space with justification]
 
+## Brute Force Approach
+[naive O(n²) or exponential approach — no optimization]
+
+## Brute Force Code
+[complete working Python brute force solution]
+
 Requirements:
 - Must be an original problem, not a reproduction of any published problem.
 - Should reflect $company interview style: $note
 - Provide clean Python with meaningful variable names.''';
+  }
+
+  /// Builds a prompt for generating a problem similar in style and concept
+  /// to [problemName], but entirely original — not a reproduction.
+  static String buildPromptForSimilarProblem(
+    String problemName,
+    String category,
+    String difficulty,
+  ) {
+    return '''You are an expert LeetCode problem designer. Generate a NEW $difficulty $category coding problem that is SIMILAR IN STYLE AND CONCEPT to "$problemName" but is an entirely original problem — not a reproduction of it.
+
+The new problem should:
+- Test the same core algorithmic technique as "$problemName"
+- Be at $difficulty level
+- Have a different theme, setting, or input data (not just a renamed version)
+
+Format your response exactly as follows:
+
+## Title
+[problem title]
+
+## Description
+[clear problem description with context]
+
+## Examples
+[2-3 concrete input/output examples]
+
+## Constraints
+[list of constraints, one per line]
+
+## Solution Approach
+[explain the optimal algorithm and key insight]
+
+## Code
+[complete working Python solution]
+
+## Time Complexity
+[Big-O time complexity with brief justification]
+
+## Space Complexity
+[Big-O space complexity with brief justification]
+
+## Brute Force Approach
+[simple naive approach and why it is less efficient]
+
+## Brute Force Code
+[complete working Python brute force solution]
+
+Requirements:
+- Must be INSPIRED BY but NOT reproduce "$problemName".
+- The core technique must match the $category pattern.
+- Provide a clean, complete Python solution with meaningful variable names.''';
   }
 
   /// Generates a company-style problem and returns a parsed [GeneratedProblem].
@@ -175,6 +233,12 @@ Requirements:
 ## Space Complexity
 [Big-O space complexity with brief justification]
 
+## Brute Force Approach
+[naive O(n²) or exponential approach — no optimization]
+
+## Brute Force Code
+[complete working Python brute force solution]
+
 Requirements:
 - The problem must be a genuine $difficulty $category LeetCode-style problem.
 - Provide a clean, complete Python solution with meaningful variable names.
@@ -202,6 +266,27 @@ Requirements:
     return _parseResponse(response, category, difficulty);
   }
 
+  /// Streams a problem similar in concept to [problemName].
+  Stream<String> generateSimilarProblemStream({
+    required String problemName,
+    required String category,
+    required String difficulty,
+  }) {
+    final prompt = buildPromptForSimilarProblem(problemName, category, difficulty);
+    return _llmService.generateStream(prompt);
+  }
+
+  /// Generates a problem similar in concept to [problemName] and parses it.
+  Future<GeneratedProblem> generateSimilarProblem({
+    required String problemName,
+    required String category,
+    required String difficulty,
+  }) async {
+    final prompt = buildPromptForSimilarProblem(problemName, category, difficulty);
+    final response = await _llmService.generate(prompt);
+    return _parseResponse(response, category, difficulty);
+  }
+
   // ---------------------------------------------------------------------------
   // Response parsing
   // ---------------------------------------------------------------------------
@@ -219,6 +304,9 @@ Requirements:
       solutionApproach:
           _extractSection(response, 'Solution Approach') ?? 'See code below.',
       code: _extractCode(response),
+      bruteForceApproach:
+          _extractSection(response, 'Brute Force Approach') ?? '',
+      bruteForceCode: _extractCodeFromSection(response, 'Brute Force Code'),
       timeComplexity: _extractSection(response, 'Time Complexity') ?? 'O(n)',
       spaceComplexity: _extractSection(response, 'Space Complexity') ?? 'O(1)',
       category: category,
@@ -252,6 +340,7 @@ Requirements:
   }
 
   /// Extracts code from the first fenced code block in the response.
+  /// Used for the optimized solution (always appears before brute force).
   String _extractCode(String text) {
     final codeBlockPattern = RegExp(
       r'```(?:python|py)?\s*\n([\s\S]*?)```',
@@ -263,5 +352,22 @@ Requirements:
     }
     // Fallback: look for a ## Code section without fences.
     return _extractSection(text, 'Code') ?? '';
+  }
+
+  /// Extracts the first fenced code block found within a specific [sectionHeading].
+  /// Used to parse the brute-force code block separately from the optimized one.
+  String _extractCodeFromSection(String text, String sectionHeading) {
+    final section = _extractSection(text, sectionHeading);
+    if (section == null || section.isEmpty) return '';
+    final codeBlockPattern = RegExp(
+      r'```(?:python|py)?\s*\n([\s\S]*?)```',
+      caseSensitive: false,
+    );
+    final match = codeBlockPattern.firstMatch(section);
+    if (match != null) {
+      return match.group(1)?.trim() ?? '';
+    }
+    // Fallback: return the raw section content (may already be plain code).
+    return section.trim();
   }
 }

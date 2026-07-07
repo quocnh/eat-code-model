@@ -364,6 +364,9 @@ class _InterviewSimulationScreenState
 
     return Scaffold(
       backgroundColor: const Color(0xFFF0F4FF),
+      // Disable automatic resize so the body column handles keyboard insets manually
+      // via a Padding wrapper — avoids double-shift when keyboard appears.
+      resizeToAvoidBottomInset: false,
       appBar: AppBar(
         backgroundColor: pathColor,
         foregroundColor: Colors.white,
@@ -381,6 +384,22 @@ class _InterviewSimulationScreenState
                   fontWeight: FontWeight.bold,
                 ),
                 overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: const Text(
+                'Scripted',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
           ],
@@ -426,13 +445,20 @@ class _InterviewSimulationScreenState
           ),
         ],
       ),
-      body: Column(
-        children: [
-          _buildPhaseBar(pathColor),
-          if (widget.technique != null) _buildTopicChip(pathColor),
-          Expanded(child: _buildChatArea()),
-          _buildInputArea(pathColor),
-        ],
+      body: Padding(
+        // Single source of keyboard avoidance — moves the whole column up
+        // as the keyboard appears, so the input bar stays fully visible.
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: Column(
+          children: [
+            _buildPhaseBar(pathColor),
+            if (widget.technique != null) _buildTopicChip(pathColor),
+            Expanded(child: _buildChatArea()),
+            _buildInputArea(pathColor),
+          ],
+        ),
       ),
     );
   }
@@ -628,12 +654,7 @@ class _InterviewSimulationScreenState
           ),
         ],
       ),
-      padding: EdgeInsets.only(
-        left: 16,
-        right: 16,
-        top: 10,
-        bottom: 10 + MediaQuery.of(context).viewInsets.bottom,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: isDone
           ? SizedBox(
               width: double.infinity,

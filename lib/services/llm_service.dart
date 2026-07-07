@@ -262,6 +262,7 @@ class TemplateLlmService implements LlmService {
 
   String _buildTemplateResponse(String category, String difficulty) {
     final data = _getTemplateData(category, difficulty);
+    final bf = _getBruteForceData(category);
     return '''
 ## Title
 ${data['title']}
@@ -288,7 +289,191 @@ ${data['time']}
 
 ## Space Complexity
 ${data['space']}
+
+## Brute Force Approach
+${bf['approach']}
+
+## Brute Force Code
+```python
+${bf['code']}
+```
 ''';
+  }
+
+  /// Returns a generic brute-force solution for the given algorithm category.
+  /// One entry per category — not per difficulty — to keep the template count manageable.
+  Map<String, String> _getBruteForceData(String category) {
+    switch (category) {
+      case 'Arrays':
+        return {
+          'approach':
+              'Check every pair of elements with a nested loop. O(n²) time but no extra space beyond the algorithm\'s own variables.',
+          'code': '''def findDuplicate_brute(nums):
+    n = len(nums)
+    for i in range(n):
+        for j in range(i + 1, n):
+            if nums[i] == nums[j]:
+                return nums[i]
+    return -1''',
+        };
+      case 'Strings':
+        return {
+          'approach':
+              'Sort both strings and compare character-by-character. O(n log n) time and O(n) space for the sorted copies.',
+          'code': '''def isAnagram_brute(s, t):
+    if len(s) != len(t):
+        return False
+    return sorted(s) == sorted(t)''',
+        };
+      case 'Trees':
+        return {
+          'approach':
+              'BFS level-order traversal that counts levels explicitly. Uses O(n) queue space instead of the O(h) implicit call-stack of the recursive DFS approach.',
+          'code': '''from collections import deque
+
+def maxDepth_brute(root):
+    if root is None:
+        return 0
+    depth = 0
+    queue = deque([root])
+    while queue:
+        depth += 1
+        for _ in range(len(queue)):
+            node = queue.popleft()
+            if node.left: queue.append(node.left)
+            if node.right: queue.append(node.right)
+    return depth''',
+        };
+      case 'Graphs':
+        return {
+          'approach':
+              'DFS with a separate visited matrix instead of in-place mutation. Easier to reason about but uses O(m × n) extra space.',
+          'code': '''def numIslands_brute(grid):
+    rows, cols = len(grid), len(grid[0])
+    visited = [[False] * cols for _ in range(rows)]
+    count = 0
+    def dfs(r, c):
+        if r < 0 or r >= rows or c < 0 or c >= cols:
+            return
+        if visited[r][c] or grid[r][c] != "1":
+            return
+        visited[r][c] = True
+        for dr, dc in [(1,0),(-1,0),(0,1),(0,-1)]:
+            dfs(r+dr, c+dc)
+    for r in range(rows):
+        for c in range(cols):
+            if grid[r][c] == "1" and not visited[r][c]:
+                count += 1
+                dfs(r, c)
+    return count''',
+        };
+      case 'Dynamic Programming':
+        return {
+          'approach':
+              'Pure recursion without memoization. Re-computes overlapping sub-problems, leading to O(2^n) exponential time instead of O(n) linear DP.',
+          'code': '''def climbStairs_brute(n):
+    if n <= 2:
+        return n
+    return climbStairs_brute(n - 1) + climbStairs_brute(n - 2)''',
+        };
+      case 'Binary Search':
+        return {
+          'approach':
+              'Linear scan through the entire array. O(n) time instead of O(log n), but simple to implement and trivially correct.',
+          'code': '''def search_brute(nums, target):
+    for i, num in enumerate(nums):
+        if num == target:
+            return i
+    return -1''',
+        };
+      case 'Two Pointers':
+        return {
+          'approach':
+              'Nested loop checking all pairs. O(n²) time instead of O(n), and does not require the array to be sorted first.',
+          'code': '''def isPalindrome_brute(s):
+    cleaned = [c.lower() for c in s if c.isalnum()]
+    return cleaned == cleaned[::-1]''',
+        };
+      case 'Sliding Window':
+        return {
+          'approach':
+              'Recompute the sum from scratch for every possible window start. O(n × k) time instead of O(n) with an incremental window.',
+          'code': '''def findMaxAverage_brute(nums, k):
+    max_avg = float("-inf")
+    for i in range(len(nums) - k + 1):
+        window_sum = sum(nums[i:i + k])
+        max_avg = max(max_avg, window_sum / k)
+    return max_avg''',
+        };
+      case 'Stack':
+        return {
+          'approach':
+              'For each element scan the rest of the array to find the answer. O(n²) time instead of O(n) with a monotonic stack.',
+          'code': '''def isValid_brute(s):
+    while "()" in s or "[]" in s or "{}" in s:
+        s = s.replace("()", "")
+        s = s.replace("[]", "")
+        s = s.replace("{}", "")
+    return s == ""''',
+        };
+      case 'Heap':
+        return {
+          'approach':
+              'Sort the entire collection upfront, then extract in order. O(n log n) time and O(n) space rather than the heap\'s O(log n) per-operation.',
+          'code': '''import bisect
+
+def lastStoneWeight_brute(stones):
+    stones = sorted(stones)
+    while len(stones) > 1:
+        a = stones.pop()
+        b = stones.pop()
+        if a != b:
+            bisect.insort(stones, a - b)
+    return stones[0] if stones else 0''',
+        };
+      case 'Backtracking':
+        return {
+          'approach':
+              'Generate all possible output strings upfront, then filter those that satisfy the constraint. Much less efficient than pruning during generation.',
+          'code': '''def letterCasePermutation_brute(s):
+    results = [""]
+    for c in s:
+        if c.isdigit():
+            results = [r + c for r in results]
+        else:
+            lowers = [r + c.lower() for r in results]
+            uppers = [r + c.upper() for r in results]
+            results = lowers + uppers
+    return results''',
+        };
+      case 'Linked List':
+        return {
+          'approach':
+              'Convert the linked list to a Python list, perform the operation on the array, then reconstruct. O(n) time but O(n) extra space.',
+          'code': '''def reverseList_brute(head):
+    values = []
+    cur = head
+    while cur:
+        values.append(cur.val)
+        cur = cur.next
+    cur = head
+    for val in reversed(values):
+        cur.val = val
+        cur = cur.next
+    return head''',
+        };
+      default:
+        return {
+          'approach':
+              'Iterate with nested loops, testing every possible combination until the answer is found. O(n²) time, O(1) extra space.',
+          'code': '''def brute_force(arr):
+    n = len(arr)
+    for i in range(n):
+        for j in range(i + 1, n):
+            pass  # evaluate pair (arr[i], arr[j])
+    return None''',
+        };
+    }
   }
 
   Map<String, String> _getTemplateData(String category, String difficulty) {
