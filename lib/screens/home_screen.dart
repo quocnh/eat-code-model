@@ -626,20 +626,18 @@ class HomeScreenState extends State<HomeScreen> {
                                             ),
                                           ),
                                         ),
-                                      // Solved — only visible when card is flipped
-                                      if (_isFlipped)
-                                        IconButton(
-                                          icon: Icon(
-                                            _currentFlashcard!.isSolved
-                                                ? Icons.check_circle
-                                                : Icons.check_circle_outline,
-                                            color: _currentFlashcard!.isSolved
-                                                ? AppColors.success
-                                                : AppColors.textSecondary,
-                                          ),
-                                          tooltip: 'Mark as Solved',
-                                          onPressed: _markCardAsSolved,
+                                      IconButton(
+                                        icon: Icon(
+                                          _currentFlashcard!.isSolved
+                                              ? Icons.check_circle
+                                              : Icons.check_circle_outline,
+                                          color: _currentFlashcard!.isSolved
+                                              ? AppColors.success
+                                              : AppColors.textSecondary,
                                         ),
+                                        tooltip: 'Mark as Solved',
+                                        onPressed: _markCardAsSolved,
+                                      ),
                                       IconButton(
                                         icon: Icon(
                                           _currentFlashcard!.isBookmarked
@@ -713,8 +711,10 @@ class HomeScreenState extends State<HomeScreen> {
                                   : AppColors.textSecondary.withOpacity(0.3),
                             ),
                             // Center actions
-                            Row(
+                            Flexible(
+                              child: Row(
                               mainAxisSize: MainAxisSize.min,
+                              mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 // Shuffle
                                 IconButton(
@@ -768,6 +768,7 @@ class HomeScreenState extends State<HomeScreen> {
                                 ),
                               ],
                             ),
+                            ), // Flexible
                             // Next
                             IconButton(
                               icon: const Icon(Icons.chevron_right, size: 28),
