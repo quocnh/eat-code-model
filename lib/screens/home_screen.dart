@@ -684,6 +684,41 @@ class HomeScreenState extends State<HomeScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        // ── Mark as Solved — full-width row, only when flipped ──
+                        if (_isFlipped && _currentFlashcard != null)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
+                            child: SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
+                                onPressed: _markCardAsSolved,
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: AppColors.success,
+                                  side: BorderSide(
+                                    color: AppColors.success.withOpacity(0.6),
+                                  ),
+                                  backgroundColor:
+                                      AppColors.success.withOpacity(0.06),
+                                  padding: const EdgeInsets.symmetric(
+                                      vertical: 10),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                icon: const Icon(
+                                    Icons.check_circle_outline,
+                                    size: 18),
+                                label: const Text(
+                                  'Mark as Solved',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        // ── Navigation row ───────────────────────────────────
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
@@ -741,39 +776,6 @@ class HomeScreenState extends State<HomeScreen> {
                                         color: AppColors.primary,
                                         fontWeight: FontWeight.w600,
                                         fontSize: 13,
-                                      ),
-                                    ),
-                                  ),
-                                // Mark as Solved — only when card is flipped
-                                if (_isFlipped && _currentFlashcard != null)
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 4),
-                                    child: TextButton.icon(
-                                      onPressed: _markCardAsSolved,
-                                      style: TextButton.styleFrom(
-                                        foregroundColor: AppColors.success,
-                                        backgroundColor:
-                                            AppColors.success.withOpacity(0.1),
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 12, vertical: 6),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius:
-                                              BorderRadius.circular(20),
-                                        ),
-                                        minimumSize: Size.zero,
-                                        tapTargetSize:
-                                            MaterialTapTargetSize.shrinkWrap,
-                                      ),
-                                      icon: const Icon(
-                                          Icons.check_circle_outline,
-                                          size: 18),
-                                      label: const Text(
-                                        'Solved',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w600,
-                                          fontSize: 13,
-                                        ),
                                       ),
                                     ),
                                   ),
