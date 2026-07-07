@@ -626,6 +626,20 @@ class HomeScreenState extends State<HomeScreen> {
                                             ),
                                           ),
                                         ),
+                                      // Solved — only visible when card is flipped
+                                      if (_isFlipped)
+                                        IconButton(
+                                          icon: Icon(
+                                            _currentFlashcard!.isSolved
+                                                ? Icons.check_circle
+                                                : Icons.check_circle_outline,
+                                            color: _currentFlashcard!.isSolved
+                                                ? AppColors.success
+                                                : AppColors.textSecondary,
+                                          ),
+                                          tooltip: 'Mark as Solved',
+                                          onPressed: _markCardAsSolved,
+                                        ),
                                       IconButton(
                                         icon: Icon(
                                           _currentFlashcard!.isBookmarked
@@ -684,40 +698,6 @@ class HomeScreenState extends State<HomeScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // ── Mark as Solved — full-width row, only when flipped ──
-                        if (_isFlipped && _currentFlashcard != null)
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
-                            child: SizedBox(
-                              width: double.infinity,
-                              child: OutlinedButton.icon(
-                                onPressed: _markCardAsSolved,
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: AppColors.success,
-                                  side: BorderSide(
-                                    color: AppColors.success.withOpacity(0.6),
-                                  ),
-                                  backgroundColor:
-                                      AppColors.success.withOpacity(0.06),
-                                  padding: const EdgeInsets.symmetric(
-                                      vertical: 10),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                                icon: const Icon(
-                                    Icons.check_circle_outline,
-                                    size: 18),
-                                label: const Text(
-                                  'Mark as Solved',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
                         // ── Navigation row ───────────────────────────────────
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
