@@ -5,6 +5,7 @@ import 'database/database_helper.dart';
 import 'services/navigation_service.dart';
 import 'services/model_download_service.dart';
 import 'services/path_progress_service.dart';
+import 'services/theme_service.dart';
 import 'screens/model_setup_screen.dart';
 
 void main() {
@@ -12,8 +13,10 @@ void main() {
   // warnings that can mask real errors. runZonedGuarded absorbs uncaught async
   // errors so a MediaPipe/Gemma channel error never crashes the whole app.
   runZonedGuarded(
-    () {
+    () async {
       WidgetsFlutterBinding.ensureInitialized();
+      // Load persisted theme before the first frame so no flash-of-wrong-theme.
+      await ThemeService().init();
       runApp(const MyApp());
     },
     (error, stack) {
@@ -28,18 +31,35 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'EatCode',
-      navigatorKey: NavigationService.navigatorKey,
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-        scaffoldBackgroundColor: Colors.grey[50],
-        useMaterial3: true,
-      ),
-      home: const _AppInitializer(),
-      routes: AppRoutes.routes,
-      onGenerateRoute: AppRoutes.onGenerateRoute,
+    return AnimatedBuilder(
+      animation: ThemeService(),
+      builder: (context, _) {
+        return MaterialApp(
+          title: 'EatCode',
+          navigatorKey: NavigationService.navigatorKey,
+          debugShowCheckedModeBanner: false,
+          themeMode: ThemeService().themeMode,
+          theme: ThemeData(
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: Colors.blue,
+              brightness: Brightness.light,
+            ),
+            scaffoldBackgroundColor: Colors.grey[50],
+            useMaterial3: true,
+          ),
+          darkTheme: ThemeData(
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: Colors.blue,
+              brightness: Brightness.dark,
+            ),
+            scaffoldBackgroundColor: const Color(0xFF121212),
+            useMaterial3: true,
+          ),
+          home: const _AppInitializer(),
+          routes: AppRoutes.routes,
+          onGenerateRoute: AppRoutes.onGenerateRoute,
+        );
+      },
     );
   }
 }
@@ -77,11 +97,11 @@ class _AppInitializerState extends State<_AppInitializer> {
     // ── 2. Init DB ─────────────────────────────────────────────────────────
     await dbHelper.database;
 
-    // ── 2. Seed problems (TemplateLlmService, always works) ────────────────
+    // ── 3. Seed problems (TemplateLlmService, always works) ────────────────
     setState(() => _statusMessage = 'Generating your problem library…');
     await dbHelper.insertSampleData();
 
-    // ── 3. Check CodeGemma model ────────────────────────────────────────────
+    // ── 4. Check CodeGemma model ────────────────────────────────────────────
     final modelReady = await ModelDownloadService().isModelDownloaded();
 
     if (!mounted) return;

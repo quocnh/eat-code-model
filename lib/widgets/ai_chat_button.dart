@@ -610,57 +610,69 @@ class _AiChatSheetState extends State<_AiChatSheet> {
     _persistHistory();
     _scrollToBottom();
 
-    // Ensure the model has had a chance to load before we decide which path
-    // to take. If init was already attempted this is essentially a no-op.
     try {
-      await _gemma.initialize();
-    } catch (_) {}
-
-    // Use Gemma streaming if model is loaded, else smart card-based fallback
-    if (_gemma.isModelLoaded) {
-      final buffer = StringBuffer();
+      // Ensure the model has had a chance to load before we decide which path.
       try {
-        await for (final chunk
-            in _gemma.generateStream(_buildGemmaPrompt(text))) {
-          buffer.write(chunk);
-          if (mounted) {
-            setState(() {
-              _messages.last =
-                  _ChatMessage(role: 'assistant', text: buffer.toString());
-            });
-            _scrollToBottom();
+        await _gemma.initialize().timeout(const Duration(seconds: 10));
+      } catch (_) {}
+
+      // Use Gemma streaming if model is loaded, else smart card-based fallback
+      if (_gemma.isModelLoaded) {
+        final buffer = StringBuffer();
+        try {
+          await for (final chunk
+              in _gemma.generateStream(_buildGemmaPrompt(text))) {
+            buffer.write(chunk);
+            if (mounted) {
+              setState(() {
+                _messages.last =
+                    _ChatMessage(role: 'assistant', text: buffer.toString());
+              });
+              // Only scroll every ~300ms to avoid excessive animation
+              if (buffer.length % 50 == 0) _scrollToBottom();
+            }
           }
+        } catch (_) {
+          // Gemma failed — fall through to smart answer
         }
-      } catch (_) {
-        // ignore — fall through to smart answer below
-      }
-      // If Gemma produced nothing, fall back to smart answer
-      if (buffer.isEmpty && mounted) {
-        final history =
-            List<_ChatMessage>.from(_messages.sublist(0, _messages.length - 2));
+        // If Gemma produced nothing, fall back to smart answer
+        if (buffer.isEmpty && mounted) {
+          final history = List<_ChatMessage>.from(
+              _messages.sublist(0, _messages.length - 2));
+          final answer = _buildSmartAnswer(text, history, widget.card);
+          setState(() {
+            _messages.last = _ChatMessage(role: 'assistant', text: answer);
+          });
+        }
+      } else {
+        // Template fallback — answer using card content directly
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+        final history = List<_ChatMessage>.from(
+            _messages.sublist(0, _messages.length - 2));
         final answer = _buildSmartAnswer(text, history, widget.card);
-        setState(() {
-          _messages.last = _ChatMessage(role: 'assistant', text: answer);
-        });
-        _scrollToBottom();
+        if (mounted) {
+          setState(() {
+            _messages.last = _ChatMessage(role: 'assistant', text: answer);
+          });
+        }
       }
-    } else {
-      // Template fallback — answer using card content directly
-      await Future<void>.delayed(const Duration(milliseconds: 300));
-      final history =
-          List<_ChatMessage>.from(_messages.sublist(0, _messages.length - 2));
-      final answer = _buildSmartAnswer(text, history, widget.card);
+    } catch (e) {
+      // Safety net: if anything unexpected throws, show a friendly message.
       if (mounted) {
         setState(() {
-          _messages.last = _ChatMessage(role: 'assistant', text: answer);
+          _messages.last = const _ChatMessage(
+            role: 'assistant',
+            text: 'Sorry, something went wrong. Please try again.',
+          );
         });
-        _scrollToBottom();
       }
-    }
-
-    if (mounted) {
-      setState(() => _isGenerating = false);
-      _persistHistory();
+    } finally {
+      // Always release the generating lock, even on uncaught exceptions.
+      if (mounted) {
+        setState(() => _isGenerating = false);
+        _scrollToBottom();
+        _persistHistory();
+      }
     }
   }
 

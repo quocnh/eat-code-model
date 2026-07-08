@@ -179,7 +179,7 @@ Requirements:
     final response = await _llmService.generate(prompt);
     final problem = _parseResponse(response, category, difficulty);
 
-    // Return with company metadata embedded
+    // Return with company metadata embedded (preserve brute-force fields)
     return GeneratedProblem(
       title: problem.title,
       description: problem.description,
@@ -187,6 +187,8 @@ Requirements:
       constraints: problem.constraints,
       solutionApproach: problem.solutionApproach,
       code: problem.code,
+      bruteForceApproach: problem.bruteForceApproach,
+      bruteForceCode: problem.bruteForceCode,
       timeComplexity: problem.timeComplexity,
       spaceComplexity: problem.spaceComplexity,
       category: category,

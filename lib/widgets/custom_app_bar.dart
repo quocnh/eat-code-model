@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../styles/colors.dart';
 import '../styles/text_styles.dart';
+import 'pacman_title.dart';
 
 class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
   const CustomAppBar({super.key, bool isPremium = false});
@@ -21,9 +22,10 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
       child: SafeArea(
         child: Row(
           children: [
-            Text(
-              'EatCode',
-              style: AppTextStyles.heading2.copyWith(
+            PacManTitle(
+              text: 'EatCode',
+              pacmanColor: const Color(0xFFFDD835),
+              textStyle: AppTextStyles.heading2.copyWith(
                 color: AppColors.primary,
               ),
             ),

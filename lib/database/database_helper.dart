@@ -21,20 +21,19 @@ class DatabaseHelper {
     String path = join(await getDatabasesPath(), 'leetcode_flashcards.db');
     return await openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: _createDb,
       onUpgrade: _onUpgrade,
     );
   }
 
   /// Clears seed data when upgrading to a schema version that changes the
-  /// generated content format (e.g. v2 adds brute-force sections).
+  /// generated content format.
+  /// v2 added brute-force sections; v3 fixes company cards missing brute-force.
   /// insertSampleData() will re-seed on the next call.
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    if (oldVersion < 2) {
-      // Wipe seeded cards so insertSampleData re-generates with brute-force sections.
-      // User-bookmarked / user-solved cards are also cleared here; this is a
-      // one-time migration acceptable for the initial brute-force feature launch.
+    if (oldVersion < 3) {
+      // Wipe seeded cards so insertSampleData re-generates with correct brute-force.
       await db.rawDelete('DELETE FROM user_progress');
       await db.rawDelete('DELETE FROM flashcards');
     }

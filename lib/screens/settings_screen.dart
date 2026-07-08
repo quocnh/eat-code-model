@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../database/database_helper.dart';
 import '../services/model_download_service.dart';
+import '../services/theme_service.dart';
 import '../styles/colors.dart';
 import '../styles/text_styles.dart';
 import 'model_setup_screen.dart';
@@ -14,7 +15,7 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   final DatabaseHelper _dbHelper = DatabaseHelper();
-  bool _isDarkMode = false;
+  final ThemeService _themeService = ThemeService();
   bool _notificationsEnabled = true;
   bool _isLoading = false;
   bool _modelDownloaded = false;
@@ -23,6 +24,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void initState() {
     super.initState();
     _checkModelStatus();
+    // Rebuild when theme changes (e.g. toggled from another screen)
+    _themeService.addListener(_onThemeChanged);
+  }
+
+  @override
+  void dispose() {
+    _themeService.removeListener(_onThemeChanged);
+    super.dispose();
+  }
+
+  void _onThemeChanged() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _checkModelStatus() async {
@@ -43,85 +56,76 @@ class _SettingsScreenState extends State<SettingsScreen> {
             children: [
               const SizedBox(height: 16),
 
-              // Account Section
+              // ── Account ──────────────────────────────────────────────────
               _buildSectionHeader('Account'),
               ListTile(
                 leading: const Icon(Icons.person_outline),
-                title: const Text('Free Account'),
-                subtitle: const Text('Upgrade to access all features'),
+                title: const Text('EatCode — Free Tier'),
+                subtitle: const Text('All features included · No sign-in required'),
                 trailing: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: AppColors.warning.withOpacity(0.1),
+                    color: Colors.green.withOpacity(0.12),
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  child: Row(
+                  child: const Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
-                        Icons.star,
-                        size: 16,
-                        color: AppColors.warning,
-                      ),
-                      const SizedBox(width: 4),
+                      Icon(Icons.check_circle_outline, size: 16, color: Colors.green),
+                      SizedBox(width: 4),
                       Text(
-                        'Upgrade',
-                        style: AppTextStyles.body2.copyWith(
-                          color: AppColors.warning,
+                        'Active',
+                        style: TextStyle(
+                          color: Colors.green,
                           fontWeight: FontWeight.w600,
+                          fontSize: 13,
                         ),
                       ),
                     ],
                   ),
                 ),
-                onTap: _handleUpgrade,
               ),
               const Divider(),
 
-              // Preferences Section
+              // ── Preferences ───────────────────────────────────────────────
               _buildSectionHeader('Preferences'),
               SwitchListTile(
-                secondary: const Icon(Icons.dark_mode_outlined),
+                secondary: Icon(
+                  _themeService.isDark ? Icons.dark_mode : Icons.dark_mode_outlined,
+                ),
                 title: const Text('Dark Mode'),
-                subtitle: const Text('Switch to dark theme'),
-                value: _isDarkMode,
-                onChanged: _handleThemeChange,
+                subtitle: Text(_themeService.isDark ? 'Dark theme active' : 'Switch to dark theme'),
+                value: _themeService.isDark,
+                onChanged: (v) => _themeService.setDark(v),
               ),
               SwitchListTile(
                 secondary: const Icon(Icons.notifications_outlined),
                 title: const Text('Notifications'),
                 subtitle: const Text('Daily study reminders'),
                 value: _notificationsEnabled,
-                onChanged: _handleNotificationChange,
+                onChanged: (v) => setState(() => _notificationsEnabled = v),
               ),
               const Divider(),
 
-              // AI Model Section
+              // ── AI Model ──────────────────────────────────────────────────
               _buildSectionHeader('AI Model'),
               ListTile(
                 leading: Icon(
                   Icons.psychology,
-                  color: _modelDownloaded
-                      ? const Color(0xFF4CAF50)
-                      : AppColors.textSecondary,
+                  color: _modelDownloaded ? const Color(0xFF4CAF50) : AppColors.textSecondary,
                 ),
                 title: const Text('CodeGemma 2B (On-Device)'),
                 subtitle: Text(
                   _modelDownloaded
                       ? 'Downloaded — AI generation active'
-                      : 'Not downloaded — using template mode',
+                      : 'Not downloaded — using curated templates',
                 ),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () async {
                   await Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => ModelSetupScreen(
-                        onSetupComplete: _checkModelStatus,
-                      ),
+                      builder: (_) => ModelSetupScreen(onSetupComplete: _checkModelStatus),
                     ),
                   );
                   _checkModelStatus();
@@ -129,12 +133,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               const Divider(),
 
-              // Data Management Section
+              // ── Data Management ───────────────────────────────────────────
               _buildSectionHeader('Data Management'),
               ListTile(
                 leading: const Icon(Icons.refresh),
                 title: const Text('Reset Progress'),
-                subtitle: const Text('Clear all progress data'),
+                subtitle: const Text('Clear all solved cards and confidence scores'),
                 onTap: _handleResetProgress,
               ),
               ListTile(
@@ -145,11 +149,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               const Divider(),
 
-              // About Section
+              // ── About ─────────────────────────────────────────────────────
               _buildSectionHeader('About'),
               ListTile(
                 leading: const Icon(Icons.info_outline),
-                title: const Text('About'),
+                title: const Text('About EatCode'),
                 onTap: _showAboutDialog,
               ),
               ListTile(
@@ -162,13 +166,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 title: const Text('Help & Support'),
                 onTap: _showHelpSupport,
               ),
+
               const SizedBox(height: 24),
               Center(
-                child: Text(
-                  'Version 1.0.0',
-                  style: AppTextStyles.body2.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
+                child: Column(
+                  children: [
+                    Text(
+                      'EatCode v1.2.0',
+                      style: AppTextStyles.body2.copyWith(
+                        color: AppColors.textSecondary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Built with Flutter · On-device AI · 100% Offline',
+                      style: AppTextStyles.body2.copyWith(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 24),
@@ -177,9 +195,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           if (_isLoading)
             Container(
               color: Colors.black.withOpacity(0.3),
-              child: const Center(
-                child: CircularProgressIndicator(),
-              ),
+              child: const Center(child: CircularProgressIndicator()),
             ),
         ],
       ),
@@ -191,25 +207,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       child: Text(
         title,
-        style: AppTextStyles.heading2.copyWith(
-          color: AppColors.primary,
-        ),
+        style: AppTextStyles.heading2.copyWith(color: AppColors.primary),
       ),
     );
-  }
-
-  void _handleThemeChange(bool value) {
-    setState(() {
-      _isDarkMode = value;
-    });
-    // TODO: Implement theme change
-  }
-
-  void _handleNotificationChange(bool value) {
-    setState(() {
-      _notificationsEnabled = value;
-    });
-    // TODO: Implement notification settings
   }
 
   Future<void> _handleResetProgress() async {
@@ -218,7 +218,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Reset Progress'),
         content: const Text(
-            'Are you sure you want to reset all progress? This action cannot be undone.'),
+            'Clear all solved cards and confidence scores? This cannot be undone.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -226,9 +226,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.red,
-            ),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
             child: const Text('RESET'),
           ),
         ],
@@ -252,8 +250,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Clear Bookmarks'),
-        content: const Text(
-            'Are you sure you want to clear all bookmarks? This action cannot be undone.'),
+        content: const Text('Remove all bookmarks? This cannot be undone.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -261,9 +258,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.red,
-            ),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
             child: const Text('CLEAR'),
           ),
         ],
@@ -276,83 +271,52 @@ class _SettingsScreenState extends State<SettingsScreen> {
       setState(() => _isLoading = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('All bookmarks have been cleared')),
+          const SnackBar(content: Text('All bookmarks cleared')),
         );
       }
     }
-  }
-
-  void _handleUpgrade() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Upgrade to Premium'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Get access to:'),
-            const SizedBox(height: 16),
-            _buildFeatureItem(Icons.check_circle, 'All premium questions'),
-            _buildFeatureItem(Icons.check_circle, 'Company-specific questions'),
-            _buildFeatureItem(Icons.check_circle, 'Advanced statistics'),
-            _buildFeatureItem(Icons.check_circle, 'Ad-free experience'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('MAYBE LATER'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              // TODO: Implement upgrade flow
-            },
-            style: TextButton.styleFrom(
-              foregroundColor: AppColors.primary,
-            ),
-            child: const Text('UPGRADE NOW'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFeatureItem(IconData icon, String text) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        children: [
-          Icon(icon, color: AppColors.primary, size: 20),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(text),
-          ),
-        ],
-      ),
-    );
   }
 
   void _showAboutDialog() {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('About EatCode'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: const [
-            Text('Version: 1.0.0'),
-            SizedBox(height: 8),
-            Text(
-                'A flashcard app to help you master coding interview problems.'),
-            SizedBox(height: 16),
-            Text('Features:'),
-            Text('• Practice problems by category'),
-            Text('• Track your progress'),
-            Text('• Bookmark favorite problems'),
-            Text('• Study solutions'),
+        title: Row(
+          children: [
+            const Icon(Icons.psychology, color: Color(0xFF1565C0), size: 28),
+            const SizedBox(width: 10),
+            const Text('EatCode'),
           ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: const [
+              Text('Version: 1.2.0', style: TextStyle(fontWeight: FontWeight.w600)),
+              SizedBox(height: 12),
+              Text(
+                'EatCode is an offline-first flashcard app that helps you master '
+                'coding interview problems through spaced repetition and on-device AI.',
+              ),
+              SizedBox(height: 16),
+              Text('Features:', style: TextStyle(fontWeight: FontWeight.w700)),
+              SizedBox(height: 6),
+              Text('• 60 curated problems across 12 categories'),
+              Text('• 24 company-specific interview problems'),
+              Text('• Dual solutions: optimized + brute force'),
+              Text('• AI-powered problem generator (CodeGemma 2B)'),
+              Text('• Floating AI chat assistant per card'),
+              Text('• Interview simulation mode'),
+              Text('• Progress tracking & bookmarks'),
+              Text('• 100% offline — no account required'),
+              SizedBox(height: 16),
+              Text('Tech Stack:', style: TextStyle(fontWeight: FontWeight.w700)),
+              SizedBox(height: 6),
+              Text('• Flutter · Dart · SQLite · MediaPipe'),
+              Text('• CodeGemma 2B (on-device LLM, ~900 MB)'),
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -371,9 +335,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: const Text('Privacy Policy'),
         content: const SingleChildScrollView(
           child: Text(
-            'This app stores all data locally on your device. '
-            'We do not collect or transmit any personal information. '
-            'Your progress and bookmarks are stored only on your device.',
+            'EatCode stores all data locally on your device.\n\n'
+            '• No account or sign-in required\n'
+            '• No internet connection needed (after optional AI model download)\n'
+            '• No analytics, tracking, or telemetry collected\n'
+            '• Your progress, bookmarks, and chat history never leave your device\n\n'
+            'The optional CodeGemma 2B model is downloaded once from Google\'s '
+            'servers and runs entirely on-device thereafter.',
           ),
         ),
         actions: [
@@ -395,13 +363,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: const [
-            Text('Need help? Here are some resources:'),
+            Text('Quick Tips:', style: TextStyle(fontWeight: FontWeight.w700)),
+            SizedBox(height: 8),
+            Text('• Tap a card to flip between Question / Solution'),
+            Text('• Both optimized and brute-force solutions are shown'),
+            Text('• Tap the ✓ icon to mark a card as solved'),
+            Text('• Tap 🔖 to bookmark cards for later review'),
+            Text('• Use the floating AI button to ask questions about any card'),
+            Text('• Timer tracks how long you spend on each problem'),
             SizedBox(height: 16),
-            Text('• Check our FAQ section'),
-            Text('• Watch tutorial videos'),
-            Text('• Contact support'),
-            SizedBox(height: 16),
-            Text('Email: support@eatcode.app'),
+            Text('AI Model:', style: TextStyle(fontWeight: FontWeight.w700)),
+            SizedBox(height: 8),
+            Text(
+              'The CodeGemma 2B model (~900 MB) enables AI problem generation '
+              'and smarter chat answers. Without it the app uses curated templates '
+              '— all features still work.',
+            ),
           ],
         ),
         actions: [
