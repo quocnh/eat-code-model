@@ -1,15 +1,13 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
-/// Animated Pac-Man logo that "eats" the EatCode text.
+/// Animated Pac-Man logo that physically moves across 'EatCode'.
 ///
-/// The Pac-Man moves left-to-right across the title text.
-/// As it passes each letter, the letter fades out (eaten).
-/// After completing the sweep, the text fades back in and the cycle repeats.
-///
-/// Animation uses two controllers:
-///   [_mouthController]  — mouth open/close (fast, 240 ms)
-///   [_sweepController]  — Pac-Man position + letter eat (2.8 s cycle)
+/// Cycle (5 s total):
+///   0.00→0.40  Eat  — Pac-Man sweeps L→R, letters disappear
+///   0.40→0.50  Pause at right
+///   0.50→0.90  Return — Pac-Man sweeps R→L, letters reappear
+///   0.90→1.00  Pause at left (reset)
 class PacManTitle extends StatefulWidget {
   final String text;
   final TextStyle? textStyle;
@@ -31,33 +29,57 @@ class _PacManTitleState extends State<PacManTitle>
   late final AnimationController _mouthController;
   late final AnimationController _sweepController;
   late final Animation<double> _mouthAngle;
-  late final Animation<double> _sweepProgress;
+
+  // Precomputed per-character layout
+  late List<double> _charLeftEdges;
+  late List<double> _charWidths;
+  late TextStyle _effectiveStyle;
+  late double _textWidth;
+
+  static const double _pacSize = 22.0;
+  static const double _gap = 6.0;
 
   @override
   void initState() {
     super.initState();
+    _precomputeLayout();
 
-    // Mouth chomping — fast open/close cycle
+    // Mouth chomps at 300 ms — slightly slower than before
     _mouthController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 240),
+      duration: const Duration(milliseconds: 300),
     )..repeat(reverse: true);
 
     _mouthAngle = Tween<double>(begin: 0.0, end: math.pi / 4.5).animate(
       CurvedAnimation(parent: _mouthController, curve: Curves.easeInOut),
     );
 
-    // Sweep: Pac-Man travels from left to right over 2.2 s, then 0.6 s pause
+    // Full 5-second cycle
     _sweepController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2800),
+      duration: const Duration(milliseconds: 5000),
     )..repeat();
+  }
 
-    // Progress 0.0 → 1.0 drives both position and letter visibility
-    _sweepProgress = CurvedAnimation(
-      parent: _sweepController,
-      curve: const Interval(0.0, 0.79, curve: Curves.easeInOut),
+  void _precomputeLayout() {
+    _effectiveStyle = (widget.textStyle ?? const TextStyle()).copyWith(
+      fontSize: widget.textStyle?.fontSize ?? 18,
+      fontWeight: widget.textStyle?.fontWeight ?? FontWeight.bold,
     );
+
+    _charLeftEdges = [];
+    _charWidths = [];
+    double x = 0;
+    for (int i = 0; i < widget.text.length; i++) {
+      final tp = TextPainter(
+        text: TextSpan(text: widget.text[i], style: _effectiveStyle),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      _charLeftEdges.add(x);
+      _charWidths.add(tp.width);
+      x += tp.width;
+    }
+    _textWidth = x;
   }
 
   @override
@@ -72,99 +94,112 @@ class _PacManTitleState extends State<PacManTitle>
     return AnimatedBuilder(
       animation: Listenable.merge([_mouthController, _sweepController]),
       builder: (context, _) {
-        final sweep = _sweepProgress.value; // 0.0 → 1.0 as PacMan sweeps
-        final mouth = _mouthAngle.value;    // current mouth open angle
+        final t = _sweepController.value;
+        final mouth = _mouthAngle.value;
 
-        return _PacManTitleLayout(
-          text: widget.text,
-          textStyle: widget.textStyle,
-          pacmanColor: widget.pacmanColor,
-          sweepProgress: sweep,
-          mouthAngle: mouth,
+        // ── Pac-Man position ──────────────────────────────────────────────
+        final double startPacLeft = 0.0;
+        final double endPacLeft = _gap + _textWidth;
+
+        double pacLeft;
+        bool facingLeft;
+
+        if (t < 0.40) {
+          final p = t / 0.40;
+          pacLeft = startPacLeft + (endPacLeft - startPacLeft) * p;
+          facingLeft = false;
+        } else if (t < 0.50) {
+          pacLeft = endPacLeft;
+          facingLeft = false;
+        } else if (t < 0.90) {
+          final p = (t - 0.50) / 0.40;
+          pacLeft = endPacLeft + (startPacLeft - endPacLeft) * p;
+          facingLeft = true;
+        } else {
+          pacLeft = startPacLeft;
+          facingLeft = false;
+        }
+
+        // ── Character opacities ───────────────────────────────────────────
+        final n = widget.text.length;
+        const fadeHalf = 0.06; // half-width of fade zone in progress units
+
+        final charOpacities = List.generate(n, (i) {
+          if (t >= 0.90) return 1.0; // pause-left: all visible
+
+          // Eat: char i disappears at eatProgress ≈ (i + 0.5) / n
+          final eatThreshold = (i + 0.5) / n;
+
+          if (t < 0.50) {
+            // Eating phase (or pause at right when eatProgress clamped to 1.0)
+            final ep = t < 0.40 ? t / 0.40 : 1.0;
+            if (ep >= eatThreshold + fadeHalf) return 0.0;
+            if (ep <= eatThreshold - fadeHalf) return 1.0;
+            return 1.0 -
+                (ep - (eatThreshold - fadeHalf)) / (2 * fadeHalf);
+          } else {
+            // Return phase: rightmost chars reappear first
+            final rp = (t - 0.50) / 0.40; // 0→1
+            final returnThreshold = 1.0 - (i + 0.5) / n;
+            if (rp >= returnThreshold + fadeHalf) return 1.0;
+            if (rp <= returnThreshold - fadeHalf) return 0.0;
+            return (rp - (returnThreshold - fadeHalf)) / (2 * fadeHalf);
+          }
+        });
+
+        // ── Render ────────────────────────────────────────────────────────
+        final totalWidth = _pacSize + _gap + _textWidth;
+
+        return SizedBox(
+          width: totalWidth,
+          height: _pacSize,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              // Letters
+              ...List.generate(n, (i) {
+                return Positioned(
+                  left: _pacSize + _gap + _charLeftEdges[i],
+                  top: 0,
+                  width: _charWidths[i],
+                  height: _pacSize,
+                  child: Opacity(
+                    opacity: charOpacities[i].clamp(0.0, 1.0),
+                    child: Center(
+                      child: Text(widget.text[i], style: _effectiveStyle),
+                    ),
+                  ),
+                );
+              }),
+
+              // Pac-Man — flipped horizontally on the return sweep
+              Positioned(
+                left: pacLeft,
+                top: 0,
+                width: _pacSize,
+                height: _pacSize,
+                child: Transform.scale(
+                  scaleX: facingLeft ? -1.0 : 1.0,
+                  child: CustomPaint(
+                    painter: _PacManPainter(
+                      color: widget.pacmanColor,
+                      mouthAngle: mouth,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         );
       },
     );
   }
 }
 
-/// Lays out Pac-Man and the text characters.
-/// Each character fades out when Pac-Man has passed it.
-class _PacManTitleLayout extends StatelessWidget {
-  final String text;
-  final TextStyle? textStyle;
-  final Color pacmanColor;
-  final double sweepProgress; // 0.0 = far left, 1.0 = past last char
-  final double mouthAngle;
-
-  const _PacManTitleLayout({
-    required this.text,
-    required this.textStyle,
-    required this.pacmanColor,
-    required this.sweepProgress,
-    required this.mouthAngle,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    const double pacSize = 22.0;
-    const double charSpacing = 0.0;
-
-    final effectiveStyle = (textStyle ?? const TextStyle()).copyWith(
-      fontSize: textStyle?.fontSize ?? 18,
-      fontWeight: textStyle?.fontWeight ?? FontWeight.bold,
-    );
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        // ── Pac-Man body (moves left-to-right using padding trick) ──────────
-        SizedBox(
-          width: pacSize,
-          height: pacSize,
-          child: CustomPaint(
-            painter: _PacManPainter(
-              color: pacmanColor,
-              mouthAngle: mouthAngle,
-            ),
-          ),
-        ),
-
-        const SizedBox(width: 6),
-
-        // ── Individual letters, each fading as Pac-Man "eats" them ──────────
-        ...List.generate(text.length, (i) {
-          // Letter i is "eaten" when sweepProgress passes its position threshold
-          final threshold = (i + 1) / (text.length + 1);
-          final eaten = sweepProgress >= threshold;
-          // Smooth fade-out as PacMan approaches
-          final approachStart = (i / (text.length + 1)) - 0.05;
-          final opacity = eaten
-              ? 0.0
-              : (sweepProgress > approachStart
-                  ? 1.0 - ((sweepProgress - approachStart) / 0.12).clamp(0.0, 1.0)
-                  : 1.0);
-
-          return Padding(
-            padding: EdgeInsets.only(right: charSpacing),
-            child: Opacity(
-              opacity: opacity.clamp(0.0, 1.0),
-              child: Text(
-                text[i],
-                style: effectiveStyle,
-              ),
-            ),
-          );
-        }),
-      ],
-    );
-  }
-}
-
-/// Draws a classic Pac-Man circle with an animated chomping mouth.
+/// Classic Pac-Man shape with animated chomping mouth.
 class _PacManPainter extends CustomPainter {
   final Color color;
-  final double mouthAngle; // 0 = closed, π/4 = wide open
+  final double mouthAngle; // 0 = closed, π/4.5 = wide open
 
   const _PacManPainter({required this.color, required this.mouthAngle});
 
@@ -177,10 +212,9 @@ class _PacManPainter extends CustomPainter {
       ..color = color
       ..style = PaintingStyle.fill;
 
-    // The mouth opens symmetrically around the right-facing (0°) direction.
-    // startAngle and sweepAngle define the arc NOT drawn (the mouth gap).
-    final startAngle = mouthAngle;          // top jaw line
-    final sweepAngle = 2 * math.pi - 2 * mouthAngle; // body arc
+    // Mouth opens symmetrically around the right-facing (0°) direction
+    final startAngle = mouthAngle;
+    final sweepAngle = 2 * math.pi - 2 * mouthAngle;
 
     final path = Path()
       ..moveTo(center.dx, center.dy)
@@ -194,14 +228,13 @@ class _PacManPainter extends CustomPainter {
 
     canvas.drawPath(path, paint);
 
-    // Eye — a small dark circle near the top
-    final eyePaint = Paint()
-      ..color = Colors.black87
-      ..style = PaintingStyle.fill;
+    // Eye — small dark circle near the top
     canvas.drawCircle(
       Offset(center.dx + radius * 0.2, center.dy - radius * 0.45),
       radius * 0.14,
-      eyePaint,
+      Paint()
+        ..color = Colors.black87
+        ..style = PaintingStyle.fill,
     );
   }
 
