@@ -392,33 +392,12 @@ class HomeScreenState extends State<HomeScreen> {
 
   Future<void> _markCardAsSolved() async {
     if (_currentFlashcard?.id == null) return;
+    if (_currentFlashcard!.isSolved) return; // already solved
 
-    final bool? confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Mark as Solved'),
-        content: const Text(
-            'Are you sure you want to mark this card as solved? It will be moved to your progress section.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text(
-              'CANCEL',
-              style: TextStyle(color: AppColors.textSecondary),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.success,
-            ),
-            child: const Text('MARK AS SOLVED'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true) return;
+    // Optimistic update: flip icon to solved immediately so user sees it
+    setState(() {
+      _currentFlashcard = _currentFlashcard!.copyWith(isSolved: true);
+    });
 
     final progress = Progress(
       flashcardId: _currentFlashcard!.id!,
@@ -433,7 +412,15 @@ class HomeScreenState extends State<HomeScreen> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('${_currentFlashcard!.title} marked as solved!'),
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle, color: Colors.white, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text('${_currentFlashcard!.title} marked as solved!'),
+              ),
+            ],
+          ),
           backgroundColor: AppColors.success,
           duration: const Duration(seconds: 2),
         ),
@@ -445,6 +432,9 @@ class HomeScreenState extends State<HomeScreen> {
         progressKey.currentState?.refreshProgress();
       }
     }
+
+    // Brief pause so user sees the ✓ icon before the card is removed
+    await Future.delayed(const Duration(milliseconds: 900));
 
     // Reload the flashcards to update the current view
     await _loadFlashcards();

@@ -159,8 +159,9 @@ class TrainingScreenState extends State<TrainingScreen> {
         .map((n) => n.techniqueId!)
         .toList();
     final visited = _progress.countVisited(techniqueIds);
+    final mastered = _progress.countMastered(techniqueIds);
     final total = path.techniqueCount;
-    final progressFraction = total > 0 ? visited / total : 0.0;
+    final progressFraction = total > 0 ? mastered / total : 0.0;
     final isStarted = visited > 0;
 
     return GestureDetector(
@@ -274,7 +275,7 @@ class TrainingScreenState extends State<TrainingScreen> {
                               children: [
                                 Text(
                                   isStarted
-                                      ? '$visited / $total topics done'
+                                      ? '$mastered/$total mastered · $visited studied'
                                       : '${path.techniqueCount} topics + Interview',
                                   style: AppTextStyles.body2.copyWith(
                                     fontSize: 12,

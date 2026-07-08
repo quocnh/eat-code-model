@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/llm_service.dart';
 import '../services/problem_generator.dart';
 import '../services/model_download_service.dart';
+import '../services/problem_quality_checker.dart';
 import '../models/generated_problem.dart';
 import '../database/database_helper.dart';
 import '../models/flashcard.dart';
@@ -895,6 +896,11 @@ class _AiProblemScreenState extends State<AiProblemScreen> {
 
                 const SizedBox(height: 20),
 
+                // ── Quality Scorecard ────────────────────────────────────────
+                _buildQualityCard(problem),
+
+                const SizedBox(height: 20),
+
                 // Save button
                 SizedBox(
                   width: double.infinity,
@@ -940,6 +946,143 @@ class _AiProblemScreenState extends State<AiProblemScreen> {
         const SizedBox(height: 8),
         child,
       ],
+    );
+  }
+
+  // ── Quality Scorecard ─────────────────────────────────────────────────────
+
+  Widget _buildQualityCard(GeneratedProblem problem) {
+    final result = ProblemQualityChecker.check(problem);
+    final pct = result.percentage;
+
+    Color gradeColor;
+    if (pct >= 0.90) gradeColor = AppColors.success;
+    else if (pct >= 0.75) gradeColor = const Color(0xFF2E7D32);
+    else if (pct >= 0.60) gradeColor = AppColors.warning;
+    else gradeColor = AppColors.error;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: gradeColor.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: gradeColor.withOpacity(0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header row
+          Row(
+            children: [
+              Icon(Icons.verified_outlined, color: gradeColor, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                'Quality Score: ${result.score}/${result.total}',
+                style: TextStyle(
+                  color: gradeColor,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                ),
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                decoration: BoxDecoration(
+                  color: gradeColor,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  'Grade ${result.grade}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          // Progress bar
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: pct,
+              backgroundColor: gradeColor.withOpacity(0.12),
+              valueColor: AlwaysStoppedAnimation<Color>(gradeColor),
+              minHeight: 5,
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // Check list (compact)
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: result.checks.entries.map((e) {
+              final ok = e.value;
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: ok
+                      ? AppColors.success.withOpacity(0.1)
+                      : AppColors.error.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: ok
+                        ? AppColors.success.withOpacity(0.3)
+                        : AppColors.error.withOpacity(0.25),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      ok ? Icons.check_circle : Icons.cancel_outlined,
+                      size: 12,
+                      color: ok ? AppColors.success : AppColors.error,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      e.key,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: ok ? AppColors.success : AppColors.error,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+
+          // Issues list (only if any)
+          if (result.issues.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            ...result.issues.map((issue) => Padding(
+              padding: const EdgeInsets.only(top: 3),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.warning_amber, size: 13, color: AppColors.warning),
+                  const SizedBox(width: 5),
+                  Expanded(
+                    child: Text(
+                      issue,
+                      style: AppTextStyles.body2.copyWith(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            )),
+          ],
+        ],
+      ),
     );
   }
 

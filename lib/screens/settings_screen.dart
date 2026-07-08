@@ -114,7 +114,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   Icons.psychology,
                   color: _modelDownloaded ? const Color(0xFF4CAF50) : AppColors.textSecondary,
                 ),
-                title: const Text('CodeGemma 2B (On-Device)'),
+                title: const Text('On-Device AI'),
                 subtitle: Text(
                   _modelDownloaded
                       ? 'Downloaded — AI generation active'
@@ -305,7 +305,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Text('• 60 curated problems across 12 categories'),
               Text('• 24 company-specific interview problems'),
               Text('• Dual solutions: optimized + brute force'),
-              Text('• AI-powered problem generator (CodeGemma 2B)'),
+              Text('• AI-powered problem generator (on-device)'),
               Text('• Floating AI chat assistant per card'),
               Text('• Interview simulation mode'),
               Text('• Progress tracking & bookmarks'),
@@ -314,7 +314,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Text('Tech Stack:', style: TextStyle(fontWeight: FontWeight.w700)),
               SizedBox(height: 6),
               Text('• Flutter · Dart · SQLite · MediaPipe'),
-              Text('• CodeGemma 2B (on-device LLM, ~900 MB)'),
+              Text('• On-device LLM (~900 MB, fully offline)'),
             ],
           ),
         ),
@@ -375,7 +375,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Text('AI Model:', style: TextStyle(fontWeight: FontWeight.w700)),
             SizedBox(height: 8),
             Text(
-              'The CodeGemma 2B model (~900 MB) enables AI problem generation '
+              'The on-device AI model (~900 MB) enables AI problem generation '
               'and smarter chat answers. Without it the app uses curated templates '
               '— all features still work.',
             ),
