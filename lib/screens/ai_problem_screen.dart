@@ -952,119 +952,227 @@ class _AiProblemScreenState extends State<AiProblemScreen> {
   // ── Quality Scorecard ─────────────────────────────────────────────────────
 
   Widget _buildQualityCard(GeneratedProblem problem) {
+    // Template mode: problems are pre-verified — show a simple badge.
+    if (!_isGemmaMode) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: AppColors.success.withOpacity(0.07),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.success.withOpacity(0.25)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.verified, color: AppColors.success, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Curated Template',
+                    style: TextStyle(
+                      color: AppColors.success,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Pre-verified problem — solutions, examples and constraints included.',
+                    style: AppTextStyles.body2.copyWith(fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // AI mode: run quality checks and show tier-appropriate feedback.
     final result = ProblemQualityChecker.check(problem);
     final pct = result.percentage;
 
-    Color gradeColor;
-    if (pct >= 0.90) gradeColor = AppColors.success;
-    else if (pct >= 0.75) gradeColor = const Color(0xFF2E7D32);
-    else if (pct >= 0.60) gradeColor = AppColors.warning;
-    else gradeColor = AppColors.error;
+    // Critical failure — AI output was too short/empty.
+    if (result.score <= 3) {
+      return Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.error.withOpacity(0.06),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.error.withOpacity(0.25)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.error_outline, color: AppColors.error, size: 18),
+                SizedBox(width: 8),
+                Text(
+                  'Generation incomplete',
+                  style: TextStyle(
+                    color: AppColors.error,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'The AI did not produce a complete problem. Tap Regenerate to try again.',
+              style: TextStyle(fontSize: 12, height: 1.4),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.refresh, size: 16),
+                label: const Text('Regenerate'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.error,
+                  side: const BorderSide(color: AppColors.error),
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8)),
+                ),
+                onPressed: _generateProblem,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // All checks passed — compact success banner.
+    if (result.issues.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: AppColors.success.withOpacity(0.07),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.success.withOpacity(0.25)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.verified, color: AppColors.success, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Quality Verified  ${result.score}/${result.total}',
+                    style: const TextStyle(
+                      color: AppColors.success,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'All quality checks passed.',
+                    style: AppTextStyles.body2.copyWith(fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Partial pass — show score bar + only failed checks + regenerate button.
+    final Color statusColor =
+        pct >= 0.75 ? AppColors.warning : AppColors.error;
 
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: gradeColor.withOpacity(0.06),
+        color: statusColor.withOpacity(0.06),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: gradeColor.withOpacity(0.25)),
+        border: Border.all(color: statusColor.withOpacity(0.25)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header row
           Row(
             children: [
-              Icon(Icons.verified_outlined, color: gradeColor, size: 18),
+              Icon(Icons.info_outline, color: statusColor, size: 18),
               const SizedBox(width: 8),
               Text(
-                'Quality Score: ${result.score}/${result.total}',
+                'Quality: ${result.score}/${result.total} checks passed',
                 style: TextStyle(
-                  color: gradeColor,
+                  color: statusColor,
                   fontWeight: FontWeight.w700,
-                  fontSize: 14,
+                  fontSize: 13,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 10),
-
-          // Progress bar
+          const SizedBox(height: 8),
           ClipRRect(
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
               value: pct,
-              backgroundColor: gradeColor.withOpacity(0.12),
-              valueColor: AlwaysStoppedAnimation<Color>(gradeColor),
+              backgroundColor: statusColor.withOpacity(0.12),
+              valueColor: AlwaysStoppedAnimation<Color>(statusColor),
               minHeight: 5,
             ),
           ),
-          const SizedBox(height: 12),
-
-          // Check list (compact)
+          const SizedBox(height: 10),
+          // Show only failed checks
           Wrap(
             spacing: 8,
             runSpacing: 6,
-            children: result.checks.entries.map((e) {
-              final ok = e.value;
-              return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: ok
-                      ? AppColors.success.withOpacity(0.1)
-                      : AppColors.error.withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: ok
-                        ? AppColors.success.withOpacity(0.3)
-                        : AppColors.error.withOpacity(0.25),
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      ok ? Icons.check_circle : Icons.cancel_outlined,
-                      size: 12,
-                      color: ok ? AppColors.success : AppColors.error,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      e.key,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: ok ? AppColors.success : AppColors.error,
-                        fontWeight: FontWeight.w500,
+            children: result.checks.entries
+                .where((e) => !e.value)
+                .map((e) => Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppColors.error.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                            color: AppColors.error.withOpacity(0.25)),
                       ),
-                    ),
-                  ],
-                ),
-              );
-            }).toList(),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.cancel_outlined,
+                              size: 12, color: AppColors.error),
+                          const SizedBox(width: 4),
+                          Text(
+                            e.key,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.error,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ))
+                .toList(),
           ),
-
-          // Issues list (only if any)
-          if (result.issues.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            ...result.issues.map((issue) => Padding(
-              padding: const EdgeInsets.only(top: 3),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(Icons.warning_amber, size: 13, color: AppColors.warning),
-                  const SizedBox(width: 5),
-                  Expanded(
-                    child: Text(
-                      issue,
-                      style: AppTextStyles.body2.copyWith(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ),
-                ],
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              icon: const Icon(Icons.refresh, size: 16),
+              label: const Text('Regenerate for better quality'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: statusColor,
+                side: BorderSide(color: statusColor.withOpacity(0.5)),
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8)),
               ),
-            )),
-          ],
+              onPressed: _generateProblem,
+            ),
+          ),
         ],
       ),
     );

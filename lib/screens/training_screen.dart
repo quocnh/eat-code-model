@@ -207,72 +207,156 @@ class TrainingScreenState extends State<TrainingScreen> {
                 'Interview Tips',
                 style: AppTextStyles.heading2.copyWith(fontSize: 17),
               ),
+              const SizedBox(width: 8),
+              Text(
+                '· tap to expand',
+                style: AppTextStyles.body2.copyWith(
+                  color: AppColors.textSecondary,
+                  fontSize: 12,
+                ),
+              ),
             ],
           ),
         ),
         SizedBox(
-          height: 148,
+          height: 156,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
             itemCount: _tips.length,
-            itemBuilder: (context, i) => _buildTipCard(_tips[i]),
+            itemBuilder: (context, i) => _buildTipCard(context, _tips[i]),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildTipCard(Map<String, dynamic> tip) {
+  Widget _buildTipCard(BuildContext context, Map<String, dynamic> tip) {
     final color = tip['color'] as Color;
-    return Container(
-      width: 200,
-      margin: const EdgeInsets.only(right: 12),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 6,
-            offset: const Offset(0, 3),
-          ),
-        ],
-        border: Border.all(color: color.withOpacity(0.15)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(tip['icon'] as String,
-                  style: const TextStyle(fontSize: 20)),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  tip['title'] as String,
-                  style: TextStyle(
-                    color: color,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
+    return GestureDetector(
+      onTap: () => _showTipDialog(context, tip),
+      child: Container(
+        width: 210,
+        margin: const EdgeInsets.only(right: 12),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 6,
+              offset: const Offset(0, 3),
+            ),
+          ],
+          border: Border.all(color: color.withOpacity(0.2)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(tip['icon'] as String,
+                    style: const TextStyle(fontSize: 20)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    tip['title'] as String,
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Expanded(
-            child: Text(
-              tip['body'] as String,
-              style: TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 11.5,
-                height: 1.4,
-              ),
-              maxLines: 5,
-              overflow: TextOverflow.ellipsis,
+                Icon(Icons.open_in_full, size: 13, color: color.withOpacity(0.5)),
+              ],
             ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: Text(
+                tip['body'] as String,
+                style: TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 11.5,
+                  height: 1.45,
+                ),
+                maxLines: 5,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Tap to read more →',
+              style: TextStyle(
+                color: color.withOpacity(0.6),
+                fontSize: 10.5,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showTipDialog(BuildContext context, Map<String, dynamic> tip) {
+    final color = tip['color'] as Color;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        contentPadding: EdgeInsets.zero,
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Colored header
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.08),
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(16),
+                  topRight: Radius.circular(16),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Text(tip['icon'] as String,
+                      style: const TextStyle(fontSize: 28)),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      tip['title'] as String,
+                      style: TextStyle(
+                        color: color,
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: Text(
+                tip['body'] as String,
+                style: const TextStyle(
+                  fontSize: 15,
+                  height: 1.6,
+                  color: Color(0xFF374151),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            style: TextButton.styleFrom(foregroundColor: color),
+            child: const Text('Got it', style: TextStyle(fontWeight: FontWeight.w600)),
           ),
         ],
       ),
