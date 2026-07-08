@@ -984,22 +984,6 @@ class _AiProblemScreenState extends State<AiProblemScreen> {
                   fontSize: 14,
                 ),
               ),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                decoration: BoxDecoration(
-                  color: gradeColor,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  'Grade ${result.grade}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
             ],
           ),
           const SizedBox(height: 10),

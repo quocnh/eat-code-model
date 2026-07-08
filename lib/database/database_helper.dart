@@ -246,6 +246,22 @@ class DatabaseHelper {
     ]);
   }
 
+  /// Removes the solved status for a single card (returns it to the Cards deck).
+  Future<void> unmarkSolved(int cardId) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.delete(
+        'user_progress',
+        where: 'flashcard_id = ? AND is_completed = 1',
+        whereArgs: [cardId],
+      );
+      await txn.rawUpdate(
+        'UPDATE flashcards SET is_solved = 0, solved_at = NULL WHERE id = ?',
+        [cardId],
+      );
+    });
+  }
+
   Future<void> resetProgress() async {
     Database db = await database;
     await db.transaction((txn) async {

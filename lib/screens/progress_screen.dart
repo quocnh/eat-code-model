@@ -92,6 +92,27 @@ class ProgressScreenState extends State<ProgressScreen>
     await _loadBookmarkedCards();
   }
 
+  Future<void> _unmarkSolved(Flashcard card) async {
+    if (card.id == null) return;
+    await _dbHelper.unmarkSolved(card.id!);
+    // Remove locally so list updates without full reload
+    if (_selectedCategory != null) {
+      setState(() {
+        _solvedCards[_selectedCategory!]?.removeWhere((c) => c.id == card.id);
+      });
+    }
+    await _loadProgressStats();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${card.title} moved back to Cards'),
+          backgroundColor: AppColors.primary,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
   Future<void> _loadSolvedCardsForCategory(String category) async {
     setState(() => _isLoading = true);
     try {
@@ -173,7 +194,7 @@ class ProgressScreenState extends State<ProgressScreen>
   Widget _buildOverallCard() {
     final total = _progressStats['total_cards'] ?? 0;
     final solved = _progressStats['completed_cards'] ?? 0;
-    final reviews = _progressStats['total_reviews'] ?? 0;
+    final remaining = (total as num) - (solved as num);
     final progress = total == 0 ? 0.0 : (solved as num) / (total as num);
 
     return Container(
@@ -211,7 +232,7 @@ class ProgressScreenState extends State<ProgressScreen>
             children: [
               _buildStatBadge('Total', total.toString()),
               _buildStatBadge('Solved', solved.toString()),
-              _buildStatBadge('Reviews', reviews.toString()),
+              _buildStatBadge('Remaining', remaining.toInt().toString()),
             ],
           ),
           const SizedBox(height: 16),
@@ -602,6 +623,29 @@ class ProgressScreenState extends State<ProgressScreen>
                         ),
                       ],
                     ],
+                  ),
+                ),
+              ),
+              const Divider(height: 1),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.undo, size: 18),
+                    label: const Text('Move back to Cards'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red.shade700,
+                      side: BorderSide(color: Colors.red.shade300),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _unmarkSolved(card);
+                    },
                   ),
                 ),
               ),

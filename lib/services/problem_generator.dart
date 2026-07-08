@@ -71,44 +71,66 @@ class ProblemGenerator {
 
     return '''You are an expert coding interview designer for $company. Generate an original $difficulty $topic coding problem in the style of $company engineering interviews.
 
-$note
-
-Format:
+Company style: $note
 
 ## Title
-[problem title]
+[A concise, descriptive problem title]
 
 ## Description
-[clear problem description]
+[A clear problem statement of at least 80 words. Define the input, the task, and the expected output. Include context that reflects $company-scale engineering.]
 
 ## Examples
-[2-3 concrete input/output examples]
+Example 1:
+Input: [actual input value]
+Output: [actual output value]
+Explanation: [why this output is correct]
+
+Example 2:
+Input: [different input, ideally an edge case — empty, single element, duplicates, or negatives]
+Output: [actual output value]
+Explanation: [why this output is correct]
 
 ## Constraints
-[constraints, one per line]
+[Each constraint on its own line with numeric bounds, e.g.:
+- 1 <= nums.length <= 10^5
+- -10^4 <= nums[i] <= 10^4]
 
 ## Solution Approach
-[optimal algorithm and key insight]
+[Explain the optimal algorithm in 2-4 sentences: the core insight, data structure used, and complexity achieved.]
 
 ## Code
-[complete working Python solution]
+```python
+def solution_function_name(param1, param2):
+    """Complete, runnable Python optimal solution."""
+    # full implementation — no placeholders
+    pass
+```
 
 ## Time Complexity
-[Big-O time with justification]
+O(...) — [one-sentence justification]
 
 ## Space Complexity
-[Big-O space with justification]
+O(...) — [one-sentence justification]
 
 ## Brute Force Approach
-[naive O(n²) or exponential approach — no optimization]
+[Describe a DIFFERENT, simpler algorithm — must use a fundamentally different strategy from optimal.]
 
 ## Brute Force Code
-[complete working Python brute force solution]
+```python
+def solution_brute_force(param1, param2):
+    """Complete, runnable Python brute force — DIFFERENT algorithm from optimal."""
+    # full implementation — no placeholders
+    pass
+```
 
-Requirements:
-- Must be an original problem, not a reproduction of any published problem.
-- Should reflect $company interview style: $note
-- Provide clean Python with meaningful variable names.''';
+STRICT REQUIREMENTS:
+1. Original problem — not a reproduction of any published problem.
+2. Description MUST be ≥ 80 words.
+3. MUST include 2 Examples each with Input, Output, Explanation.
+4. Constraints MUST include at least 2 numeric bounds.
+5. Both Code sections MUST be complete `def` functions — no placeholders.
+6. Brute force MUST use a fundamentally different algorithm.
+7. Both Time and Space Complexity are MANDATORY.''';
   }
 
   /// Builds a prompt for generating a problem similar in style and concept
@@ -118,49 +140,67 @@ Requirements:
     String category,
     String difficulty,
   ) {
-    return '''You are an expert LeetCode problem designer. Generate a NEW $difficulty $category coding problem that is SIMILAR IN STYLE AND CONCEPT to "$problemName" but is an entirely original problem — not a reproduction of it.
-
-The new problem should:
-- Test the same core algorithmic technique as "$problemName"
-- Be at $difficulty level
-- Have a different theme, setting, or input data (not just a renamed version)
-
-Format your response exactly as follows:
+    return '''You are an expert LeetCode problem designer. Generate a NEW $difficulty $category coding problem INSPIRED BY "$problemName" — same core technique, completely different theme and input scenario.
 
 ## Title
-[problem title]
+[A concise, descriptive problem title — not a renamed version of "$problemName"]
 
 ## Description
-[clear problem description with context]
+[A clear problem statement of at least 80 words. Different real-world setting from "$problemName". Define input, task, and expected output clearly.]
 
 ## Examples
-[2-3 concrete input/output examples]
+Example 1:
+Input: [actual input value]
+Output: [actual output value]
+Explanation: [why this output is correct]
+
+Example 2:
+Input: [edge case — empty, single element, duplicates, or negatives]
+Output: [actual output value]
+Explanation: [why this output is correct]
 
 ## Constraints
-[list of constraints, one per line]
+[Each constraint on its own line with numeric bounds, e.g.:
+- 1 <= nums.length <= 10^5
+- -10^4 <= nums[i] <= 10^4]
 
 ## Solution Approach
-[explain the optimal algorithm and key insight]
+[Explain the optimal algorithm in 2-4 sentences using the $category technique.]
 
 ## Code
-[complete working Python solution]
+```python
+def solution_function_name(param1, param2):
+    """Complete, runnable Python optimal solution using $category technique."""
+    # full implementation — no placeholders
+    pass
+```
 
 ## Time Complexity
-[Big-O time complexity with brief justification]
+O(...) — [one-sentence justification]
 
 ## Space Complexity
-[Big-O space complexity with brief justification]
+O(...) — [one-sentence justification]
 
 ## Brute Force Approach
-[simple naive approach and why it is less efficient]
+[DIFFERENT algorithm from optimal — e.g., nested loops if optimal uses hash map. Explain why it is less efficient.]
 
 ## Brute Force Code
-[complete working Python brute force solution]
+```python
+def solution_brute_force(param1, param2):
+    """Complete, runnable Python brute force — DIFFERENT algorithm from optimal."""
+    # full implementation — no placeholders
+    pass
+```
 
-Requirements:
-- Must be INSPIRED BY but NOT reproduce "$problemName".
-- The core technique must match the $category pattern.
-- Provide a clean, complete Python solution with meaningful variable names.''';
+STRICT REQUIREMENTS:
+1. INSPIRED BY but NOT a reproduction of "$problemName" — different theme and scenario.
+2. Core $category technique must be the same.
+3. Description MUST be ≥ 80 words.
+4. MUST include 2 Examples each with Input, Output, Explanation.
+5. Constraints MUST include at least 2 numeric bounds.
+6. Both Code sections MUST be complete `def` functions — no placeholders.
+7. Brute force MUST use a fundamentally different algorithm.
+8. Both Time and Space Complexity are MANDATORY.''';
   }
 
   /// Generates a company-style problem and returns a parsed [GeneratedProblem].
@@ -209,44 +249,66 @@ Requirements:
 
   /// Builds a structured prompt for the LLM.
   static String buildPrompt(String category, String difficulty) {
-    return '''You are an expert LeetCode problem designer. Generate a $difficulty $category coding problem in the following format:
+    return '''You are an expert LeetCode problem designer. Generate a $difficulty $category coding problem. Follow EVERY requirement below exactly — no shortcuts.
 
 ## Title
-[problem title]
+[A concise, descriptive problem title]
 
 ## Description
-[clear problem description with context]
+[A clear problem statement of at least 80 words. Define the input, the task, and the expected output. Include context that makes the problem concrete.]
 
 ## Examples
-[2-3 concrete input/output examples]
+Example 1:
+Input: [actual input value]
+Output: [actual output value]
+Explanation: [why this output is correct]
+
+Example 2:
+Input: [different input, ideally an edge case — empty, single element, duplicates, or negatives]
+Output: [actual output value]
+Explanation: [why this output is correct]
 
 ## Constraints
-[list of constraints, one per line]
+[Each constraint on its own line. MUST include numeric bounds, e.g.:
+- 1 <= nums.length <= 10^5
+- -10^4 <= nums[i] <= 10^4]
 
 ## Solution Approach
-[explain the optimal algorithm and key insight]
+[Explain the optimal algorithm in 2-4 sentences: the core insight, what data structure you use, and why it achieves the given complexity.]
 
 ## Code
-[complete working Python solution]
+```python
+def solution_function_name(param1, param2):
+    """Complete, runnable Python solution using the optimal approach."""
+    # full implementation — no placeholders or '...'
+    pass
+```
 
 ## Time Complexity
-[Big-O time complexity with brief justification]
+O(...) — [one-sentence justification referencing the algorithm]
 
 ## Space Complexity
-[Big-O space complexity with brief justification]
+O(...) — [one-sentence justification]
 
 ## Brute Force Approach
-[naive O(n²) or exponential approach — no optimization]
+[Describe a DIFFERENT, simpler algorithm — e.g., nested loops if optimal uses a hash map, or recursion without memoization if optimal uses DP. Must be a meaningfully different strategy.]
 
 ## Brute Force Code
-[complete working Python brute force solution]
+```python
+def solution_brute_force(param1, param2):
+    """Complete, runnable Python brute force — uses a DIFFERENT algorithm from the optimal solution."""
+    # full implementation — no placeholders or '...'
+    pass
+```
 
-Requirements:
-- The problem must be a genuine $difficulty $category LeetCode-style problem.
-- Provide a clean, complete Python solution with meaningful variable names.
-- Include at least 2 examples.
-- List all important constraints.
-- Keep the solution approach concise but insightful.''';
+STRICT REQUIREMENTS — violating any of these will make the problem unusable:
+1. Description MUST be ≥ 80 words with full context.
+2. MUST include exactly 2 Examples, each with Input, Output, and Explanation.
+3. Constraints MUST include at least 2 numeric bounds (e.g. 1 <= n <= 10^5).
+4. Both Code sections MUST be complete, runnable Python functions starting with `def`.
+5. The brute force MUST use a fundamentally different algorithm (not a minor variation of optimal).
+6. Both Time and Space Complexity sections are MANDATORY.
+7. Do NOT include any placeholder text such as "...", "TODO", or "your code here".''';
   }
 
   /// Generates a problem and streams tokens as they are produced.
